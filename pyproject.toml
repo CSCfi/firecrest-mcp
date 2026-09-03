@@ -1,0 +1,16 @@
+[project]
+name = "firecrest-mcp"
+version = "0.1.0"
+description = "FirecREST v2 MCP server"
+requires-python = ">=3.13"
+dependencies = [
+    "fastmcp>=4.0",
+    "pyfirecrest>=3.9",
+]
+
+[project.scripts]
+firecrest-mcp = "firecrest_mcp.server:main"
+
+[build-system]
+requires = ["flit_core >= 3.12.0, <5"]
+build-backend = "flit_core.buildapi"
