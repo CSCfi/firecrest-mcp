@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "FirecREST v2 MCP server"
 requires-python = ">=3.13"
 dependencies = [
-    "fastmcp>=4.0",
-    "pyfirecrest>=3.9",
+    "fastmcp>=4.0.5",
+    "pyfirecrest>=3.10.0",
 ]
 
 [project.scripts]
