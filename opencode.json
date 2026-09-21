@@ -3,7 +3,7 @@
     "mcp": {
         "firecrest-lumi": {
             "type": "local",
-            "command": ["uv", "run", "firecrest-mcp"],
+            "command": ["uvx", "firecrest-mcp"],
             "enabled": true,
             "environment": {
                 "FIRECREST_URL": "https://api.lumi.csc.fi/v1"
@@ -11,7 +11,7 @@
         },
         "firecrest-roihu": {
             "type": "local",
-            "command": ["uv", "run", "firecrest-mcp"],
+            "command": ["uvx", "firecrest-mcp"],
             "enabled": true,
             "environment": {
                 "FIRECREST_URL": "https://api.roihu.csc.fi/v1"

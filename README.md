@@ -3,8 +3,9 @@
 ## Installation
 
 ```bash
-git clone <repo-url> firecrest-mcp
-pip install firecrest-mcp 
+git clone <repo-url>
+cd firecrest-mcp
+uv tool install .
 ```
 
 ## Usage
@@ -15,18 +16,7 @@ Set the value of the `FIRECREST_TOKEN` environment variable to your FirecREST to
 export FIRECREST_TOKEN=<your-firecrest-token>
 ```
 
-To use the server for interacting with LUMI using OpenCode, edit your `opencode.json` to include
-the contents below.
-
-```json
-{
-    "$schema": "https://opencode.ai/config.json",
-    "mcp": {
-        "firecrest-lumi": {
-            "type": "local",
-            "command": ["firecrest-mcp", "https://api.lumi.csc.fi/v1"],
-            "enabled": true
-        }
-    }
-}
-```
+The fastest way to try out the server is by running `opencode` in this directory, as the
+`opencode.json` file included in this directory configures the MCP server locally. To
+use the server outside of this directory, simply copy the contents of the included
+`opencode.json` file to your global config (`~/.config/opencode/opencode.json`).
