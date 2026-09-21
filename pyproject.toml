@@ -12,5 +12,5 @@ dependencies = [
 firecrest-mcp = "firecrest_mcp.server:main"
 
 [build-system]
-requires = ["flit_core >= 3.12.0, <5"]
-build-backend = "flit_core.buildapi"
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
