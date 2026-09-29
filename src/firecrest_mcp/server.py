@@ -1,5 +1,6 @@
 import os
 import time
+from pathlib import Path
 
 import jwt
 from fastmcp import FastMCP
@@ -50,7 +51,15 @@ class FirecrestClientWrapper(
 
 
 fc = FirecrestClientWrapper()
-mcp = FastMCP("FirecREST v2")
+CONTEXT_DIR = Path(__file__).parent / "context"
+instructions = None
+url = os.getenv("FIRECREST_URL", "http://localhost")
+if "roihu" in url:
+    instructions = (CONTEXT_DIR / "roihu.md").read_text()
+elif "lumi" in url:
+    instructions = (CONTEXT_DIR / "lumi.md").read_text()
+
+mcp = FastMCP("FirecREST v2", instructions=instructions)
 
 for name in dir(fc):
     attr = getattr(fc, name)
