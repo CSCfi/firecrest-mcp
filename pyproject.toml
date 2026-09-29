@@ -6,6 +6,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastmcp>=4.0.5",
     "pyfirecrest>=3.10.0",
+    "cachetools",
 ]
 
 [project.scripts]

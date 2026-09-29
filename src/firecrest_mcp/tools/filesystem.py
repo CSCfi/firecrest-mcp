@@ -76,7 +76,7 @@ class FirecrestFilesystemToolsMixin:
         """Display the ending of a specified file. By default, 10 lines will be
         returned. num_bytes and num_lines cannot be specified simultaneously.
         """
-        return self.client.head(
+        return self.client.tail(
             system_name, path, num_bytes, num_lines, exclude_beginning
         )
 

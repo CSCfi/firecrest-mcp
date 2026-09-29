@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastmcp.tools import tool
-
+import cachetools.func
 
 class FirecrestComputeToolsMixin:
     @tool()
@@ -38,6 +38,7 @@ class FirecrestComputeToolsMixin:
         )
 
     @tool()
+    @cachetools.func.ttl_cache(maxsize=10, ttl=20)
     def job_info(
         self,
         system_name: Annotated[str, "the system name where the filesystem belongs to"],
@@ -72,6 +73,7 @@ class FirecrestComputeToolsMixin:
         )
 
     @tool()
+    @cachetools.func.ttl_cache(maxsize=10, ttl=60)
     def job_metadata(
         self,
         system_name: Annotated[str, "the system name where the filesystem belongs to"],
