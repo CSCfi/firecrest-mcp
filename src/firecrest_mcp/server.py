@@ -43,17 +43,20 @@ class FirecrestClientWrapper(
     FirecrestFilesystemToolsMixin,
     FirecrestStatusToolsMixin,
 ):
-    def __init__(self):
+    def __init__(self, url: str):
         self.client = Firecrest(
-            firecrest_url=os.getenv("FIRECREST_URL", "http://localhost"),
+            firecrest_url=url,
             authorization=TokenAuth(),
         )
 
 
-fc = FirecrestClientWrapper()
+url = os.getenv("FIRECREST_URL", None)
+if not url:
+    raise RuntimeError("Environment variable FIRECREST_URL is not defined.")
+
+fc = FirecrestClientWrapper(url)
 CONTEXT_DIR = Path(__file__).parent / "context"
 instructions = None
-url = os.getenv("FIRECREST_URL", "http://localhost")
 if "roihu" in url:
     instructions = (CONTEXT_DIR / "roihu.md").read_text()
 elif "lumi" in url:
