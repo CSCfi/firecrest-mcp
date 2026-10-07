@@ -30,9 +30,22 @@ class TokenAuth:
             return False
 
     def get_access_token(self):
-        token = os.getenv("FIRECREST_TOKEN", None)
+        path = Path(
+            os.getenv("FIRECREST_TOKEN_PATH", "~/.firecrest/token")
+        ).expanduser()
+        try:
+            # Refuse the file if group or others have any permission bits set
+            # (same rule as SSH private keys).
+            if path.stat().st_mode & 0o077:
+                raise RuntimeError(
+                    f"Token file {path} is accessible by other users. "
+                    f"Run `chmod 600 {path}` to fix this."
+                )
+            token = path.read_text().strip()
+        except OSError as e:
+            raise RuntimeError(f"Could not read token file {path}: {e}") from e
         if not token:
-            raise RuntimeError("Environment variable FIRECREST_TOKEN is not defined.")
+            raise RuntimeError(f"Token file {path} is empty.")
         if not self._is_token_valid(token):
             raise RuntimeError("Token is invalid or has expired.")
         return token

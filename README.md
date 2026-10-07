@@ -10,11 +10,19 @@ uv tool install .
 
 ## Usage
 
-Set the value of the `FIRECREST_TOKEN` environment variable to your FirecREST token.
+Save your FirecREST token in a plain text file at `~/.firecrest/token`. The file must
+not be accessible by other users, otherwise the server refuses to read it. The file is
+read on every request, so the token can be refreshed by rewriting the file without
+restarting the server.
 
 ```bash
-export FIRECREST_TOKEN=<your-firecrest-token>
+mkdir -p ~/.firecrest
+echo "<your-firecrest-token>" > ~/.firecrest/token
+chmod 600 ~/.firecrest/token
 ```
+
+To keep the token somewhere else, set the `FIRECREST_TOKEN_PATH` environment variable
+to the path of the token file.
 
 The fastest way to try out the server is by running `opencode` in this directory, as the
 `opencode.json` file included in this directory configures the MCP server locally. To
