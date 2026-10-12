@@ -24,12 +24,17 @@ chmod 600 ~/.firecrest/token
 To keep the token somewhere else, set the `FIRECREST_TOKEN_PATH` environment variable
 to the path of the token file.
 
-The fastest way to try out the server is by running `opencode` in this directory, as the
-`opencode.json` file included in this directory configures the MCP server locally. To
-use the server outside of this directory, simply copy the contents of the included
-`opencode.json` file to your global config (`~/.config/opencode/opencode.json`).
+The server also requires the `FIRECREST_URL` environment variable, which points it at
+the FirecREST API of the target system (e.g. `https://api.lumi.csc.fi/v1`). If it isn't
+set, the server won't start.
 
-The server also requires the `FIRECREST_URL` environment variable, which points it at the
-FirecREST API of the target system (e.g. `https://api.lumi.csc.fi/v1`). The included
-`opencode.json` already sets it for LUMI and Roihu; if you configure the server some
-other way, you must set it yourself, or the server will refuse to start.
+### Client configuration
+
+`examples/` has Claude Code and OpenCode configs for LUMI and Roihu. They start the
+server with `uvx firecrest-mcp`, which runs the version installed with
+`uv tool install .`. Run `uv tool install --reinstall .` after pulling to update it.
+
+## Development
+
+`.mcp.json` in the repo root starts the server with `uv run`, which uses the checked-out
+code. Restart Claude Code after switching branches or editing the code.
