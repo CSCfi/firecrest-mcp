@@ -109,10 +109,10 @@ class FirecrestFilesystemToolsMixin:
 
     @tool()
     def chmod(
+        self,
         system_name: Annotated[str, "the system name where the filesystem belongs to"],
         path: Annotated[str, "the absolute target path of the file"],
         mode: Annotated[str, "same as numeric mode of linux chmod tool"],
-        self,
     ) -> dict:
         """Changes the file mod bits of a given file according to the specified mode."""
         return self.client.chmod(system_name, path, mode)
