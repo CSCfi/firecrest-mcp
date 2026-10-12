@@ -521,6 +521,7 @@ name = "firecrest-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "cachetools" },
     { name = "fastmcp" },
     { name = "pyfirecrest" },
 ]
@@ -533,6 +534,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cachetools" },
     { name = "fastmcp", specifier = ">=4.0.5" },
     { name = "pyfirecrest", specifier = ">=3.10.0" },
 ]
