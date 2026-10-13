@@ -1,102 +1,148 @@
+"""Tools for Slurm jobs: submitting, querying, cancelling and attaching to them."""
+
+from pathlib import Path
 from typing import Annotated
 
-from fastmcp.tools import tool
 import cachetools.func
+from fastmcp.exceptions import ToolError
+from fastmcp.tools import tool
+from firecrest.v2 import Firecrest
+
+from firecrest_mcp.policy import check_local_paths, load_cluster, own_jobs
+from firecrest_mcp.tools.params import SystemName
+
 
 class FirecrestComputeToolsMixin:
+    client: Firecrest
+
     @tool()
     def submit(
         self,
-        system_name: Annotated[str, "the system name where the filesystem belongs to"],
+        system_name: SystemName,
         working_dir: Annotated[str | None, "the working directory of the job"],
         script_str: Annotated[str | None, "the job script"] = None,
         script_local_path: Annotated[str | None, "path to the job script"] = None,
         script_remote_path: Annotated[
-            str | None, "path to the job script on the remote filesystem"
+            str | None, "path to the job script on the system"
         ] = None,
         env_vars: Annotated[
-            dict[str, str] | None,
-            "environment variables to be set before running the job",
+            dict[str, str] | None, "environment variables to set for the job"
         ] = None,
-        account: Annotated[str | None, "the account to be used for the job"] = None,
-        partition: Annotated[str | None, "the partition to be used for the job"] = None,
-        reservation: Annotated[
-            str | None, "the reservation to be used for the job"
-        ] = None,
+        account: Annotated[str | None, "the account to bill"] = None,
+        partition: Annotated[str | None, "the partition to run in"] = None,
+        reservation: Annotated[str | None, "the reservation to run in"] = None,
     ) -> dict:
-        """Submit a job."""
+        """Submit a job. Exactly one of script_str, script_local_path or
+        script_remote_path must be given. The account and partition arguments
+        override the script's #SBATCH lines.
+        """
+        scripts = [script_str, script_local_path, script_remote_path]
+        if sum(script is not None for script in scripts) != 1:
+            raise ToolError(
+                "Exactly one of script_str, script_local_path or script_remote_path"
+                " must be given."
+            )
+        cluster = load_cluster()
+        cluster.check_remote_paths(working_dir, script_remote_path)
+        # The script is read here and submitted as a string, so the checked script
+        # is the one that runs even if the file changes in between.
+        if script_local_path is not None:
+            check_local_paths(script_local_path)
+            try:
+                script_str = Path(script_local_path).read_text()
+            except OSError as e:
+                raise ToolError(f"Could not read job script: {e}") from e
+        elif script_remote_path is not None:
+            script_str = self.client.view(system_name, path=script_remote_path)
+        assert script_str is not None
+        account, partition = cluster.job_options(
+            script_str, working_dir, env_vars, account, partition, reservation
+        )
         return self.client.submit(
             system_name,
-            working_dir,
-            script_str,
-            script_local_path,
-            script_remote_path,
-            env_vars,
-            account,
-            partition,
-            reservation,
+            working_dir=working_dir,
+            script_str=script_str,
+            env_vars=env_vars,
+            account=account,
+            partition=partition,
+            reservation=reservation,
         )
 
     @tool()
     @cachetools.func.ttl_cache(maxsize=10, ttl=20)
     def job_info(
         self,
-        system_name: Annotated[str, "the system name where the filesystem belongs to"],
+        system_name: SystemName,
         jobid: Annotated[str | None, "the ID of the job"] = None,
-        allusers: Annotated[
-            bool, "whether to return jobs of all users or only the current user"
-        ] = False,
         account: Annotated[
-            str | None,
-            "an account to filter the jobs by."
-            + " It will only be taken into account when you are not specifying a jobid.",
+            str | None, "show only the jobs of this account; ignored with a jobid"
         ] = None,
         name: Annotated[
-            str | None,
-            "a job name to filter the jobs by."
-            + "It will only be taken into account when you are not specifying a jobid.",
+            str | None, "show only the jobs with this name; ignored with a jobid"
         ] = None,
         time_window: Annotated[
             str | None,
-            "how far back to look for historical (completed, failed, cancelled…) jobs."
-            + " Pending and running jobs are always returned."
-            + " Accepted values are 1h, 8h, 24h, 3d and 7d."
-            + " It will only be taken into account when you are not specifying a jobid."
-            + " Has no effect on PBS clusters.",
+            "how far back to look for finished (completed, failed, cancelled…) jobs:"
+            " 1h, 8h, 24h, 3d or 7d. Pending and running jobs are always returned."
+            " Ignored with a jobid.",
         ] = None,
     ) -> list:
-        """Get job information. When the job is not specified, it will return all the
-        jobs.
+        """Get information about your jobs. When the job is not specified, it will
+        return all of them. Other users' jobs are not available.
         """
-        return self.client.job_info(
-            system_name, jobid, allusers, account, name, time_window
+        jobs = self.client.job_info(
+            system_name,
+            jobid=jobid,
+            allusers=False,
+            account=account,
+            name=name,
+            time_window=time_window,
         )
+        return own_jobs(self.client, system_name, jobs, jobid)
 
     @tool()
     @cachetools.func.ttl_cache(maxsize=10, ttl=60)
     def job_metadata(
         self,
-        system_name: Annotated[str, "the system name where the filesystem belongs to"],
+        system_name: SystemName,
         jobid: Annotated[str, "the ID of the job"],
     ) -> dict:
-        """Get job metadata."""
-        return self.client.job_metadata(system_name, jobid)
+        """Get the metadata of one of your jobs."""
+        own_jobs(
+            self.client,
+            system_name,
+            self.client.job_info(system_name, jobid=jobid),
+            jobid,
+        )
+        return self.client.job_metadata(system_name, jobid=jobid)
 
     @tool()
     def cancel_job(
         self,
-        system_name: Annotated[str, "the system name where the filesystem belongs to"],
+        system_name: SystemName,
         jobid: Annotated[str, "the ID of the job"],
     ) -> dict:
-        """Cancel a job."""
-        return self.client.cancel_job(system_name, jobid)
+        """Cancel one of your jobs."""
+        own_jobs(
+            self.client,
+            system_name,
+            self.client.job_info(system_name, jobid=jobid),
+            jobid,
+        )
+        return self.client.cancel_job(system_name, jobid=jobid)
 
     @tool()
     def attach_to_job(
         self,
-        system_name: Annotated[str, "the system name where the filesystem belongs to"],
+        system_name: SystemName,
         jobid: Annotated[str, "the ID of the job"],
         command: Annotated[str, "the command to be executed"],
     ) -> dict:
-        """Attach a process to a job."""
-        return self.client.attach_to_job(system_name, jobid, command)
+        """Run a command inside one of your running jobs."""
+        own_jobs(
+            self.client,
+            system_name,
+            self.client.job_info(system_name, jobid=jobid),
+            jobid,
+        )
+        return self.client.attach_to_job(system_name, jobid=jobid, command=command)

@@ -1,54 +1,18 @@
+"""The MCP server: the FirecREST client and the tools of one system, chosen by
+FIRECREST_URL.
+"""
+
 import os
-import time
 from pathlib import Path
 
-import jwt
 from fastmcp import FastMCP
 from firecrest.v2 import Firecrest
 
+from firecrest_mcp.auth import TokenAuth
+from firecrest_mcp.policy import cluster_name
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
-
-
-class TokenAuth:
-    def __init__(self):
-        pass
-
-    def _is_token_valid(self, token: str) -> bool:
-        try:
-            payload = jwt.decode(
-                token,
-                options={
-                    "verify_signature": False,
-                    "verify_exp": False,
-                    "verify_aud": False,
-                },
-            )
-            return time.time() <= payload["exp"]
-        except Exception:
-            return False
-
-    def get_access_token(self):
-        path = Path(
-            os.getenv("FIRECREST_TOKEN_PATH", "~/.firecrest/token")
-        ).expanduser()
-        try:
-            # Refuse the file if group or others have any permission bits set
-            # (same rule as SSH private keys).
-            if path.stat().st_mode & 0o077:
-                raise RuntimeError(
-                    f"Token file {path} is accessible by other users. "
-                    f"Run `chmod 600 {path}` to fix this."
-                )
-            token = path.read_text().strip()
-        except OSError as e:
-            raise RuntimeError(f"Could not read token file {path}: {e}") from e
-        if not token:
-            raise RuntimeError(f"Token file {path} is empty.")
-        if not self._is_token_valid(token):
-            raise RuntimeError("Token is invalid or has expired.")
-        return token
 
 
 class FirecrestClientWrapper(
@@ -68,12 +32,11 @@ if not url:
     raise RuntimeError("Environment variable FIRECREST_URL is not defined.")
 
 fc = FirecrestClientWrapper(url)
+# Instructions for the agent about the cluster, from context/<cluster>.md if there is
+# one.
 CONTEXT_DIR = Path(__file__).parent / "context"
-instructions = None
-if "roihu" in url:
-    instructions = (CONTEXT_DIR / "roihu.md").read_text()
-elif "lumi" in url:
-    instructions = (CONTEXT_DIR / "lumi.md").read_text()
+context = {path.stem: path for path in CONTEXT_DIR.glob("*.md")}.get(cluster_name())
+instructions = context.read_text() if context else None
 
 mcp = FastMCP("FirecREST v2", instructions=instructions)
 

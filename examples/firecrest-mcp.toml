@@ -1,0 +1,28 @@
+# Copy to .firecrest-mcp.toml in your local project directory, and replace the
+# placeholder projects with your own. A missing key allows nothing.
+
+# Local files and directories that the upload, download and submit tools may use. A
+# directory includes everything below it. Relative entries start from the project
+# directory, so "." is the whole project.
+local_paths = ["."]
+
+# The server with FIRECREST_URL https://api.lumi.csc.fi/v1.
+[lumi]
+# Remote directories that the tools may use, with everything below them.
+remote_paths = ["/scratch/project_xxxxxxxxx", "/projappl/project_xxxxxxxxx"]
+accounts = ["project_xxxxxxxxx"]
+default_account = "project_xxxxxxxxx"  # when no account is given
+partitions = ["debug", "small", "dev-g", "small-g"]
+default_partition = "small"  # when no partition is given
+reservations = []
+groups = []  # groups that chgrp may set, e.g. ["project_xxxxxxxxx"]
+
+# Covers both of Roihu's systems, cpu and gpu, so GPU jobs must name their partition.
+[roihu]
+remote_paths = ["/scratch/project_xxxxxxx", "/projappl/project_xxxxxxx"]
+accounts = ["project_xxxxxxx"]
+default_account = "project_xxxxxxx"  # when no account is given
+partitions = ["test", "small", "gputest", "gpumedium"]
+default_partition = "small"  # when no partition is given
+reservations = []
+groups = []  # groups that chgrp may set, e.g. ["project_xxxxxxx"]
