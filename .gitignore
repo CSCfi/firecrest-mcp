@@ -9,4 +9,8 @@ wheels/
 # Virtual environments
 .venv
 
+# Local Claude Code settings
 .claude
+
+# Per-user server configuration
+.firecrest-mcp.toml
