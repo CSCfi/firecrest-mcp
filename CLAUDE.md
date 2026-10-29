@@ -39,13 +39,17 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
   server then registers **every callable non-dunder attribute** of the wrapper as an
   MCP tool, so any helper method added to a mixin becomes a tool too — keep helpers
   out of the mixins (or make them module-level functions).
+  `tests/test_server.py` checks that the server registers exactly the mixins' tools.
+  The only list of tool names is `TOOL_CALLS` and `UNCHECKED_TOOLS` in
+  `tests/policy/test_tools.py`.
 - **Client calls**: pass everything after `system_name` to `self.client` methods by
   keyword. pyfirecrest's untyped `_with_correlation_id` decorator hides their
   signatures from ty, so only the names catch a wrong argument. The tests' mock
   client is a `create_autospec(Firecrest)`, which rejects unknown names.
 - **Import-time side effects**: `server.py` reads `FIRECREST_URL` and raises if it's
   missing, so tests import the mixins (or `auth`) directly with a mock `client` rather
-  than importing `server`.
+  than importing `server`. Only `tests/test_server.py` imports it, after setting
+  `FIRECREST_URL`.
 - **Per-system instructions**: `context/<cluster>.md`, if it exists, is passed as the
   FastMCP `instructions`, where `<cluster>` is `cluster_name()` (see below). One server
   process serves one system; `.mcp.json` runs two instances.
@@ -63,21 +67,24 @@ failing closed. `cluster_name()` picks the `[<cluster>]` table from the `FIRECRE
 host; it applies to every `system_name`. Tools check all of their checked arguments
 before calling the client:
 
-- `load_cluster().check_remote_paths(*paths)` for remote paths, skipping `None`.
-  `PATH_ALIASES` lists directories a cluster reaches under two names (LUMI's
+- `load_cluster_policy().check_remote_paths(*paths)` for remote paths, skipping
+  `None`. `PATH_ALIASES` lists directories a cluster reaches under two names (LUMI's
   `/project` and `/projappl`).
 - `check_local_paths(*paths)` for local paths, skipping `None`.
-- `ClusterPolicy.account(account)` for accounts. It returns `default_account` for
-  `None`; pass the result on to the client. Tools that may run a transfer job call
-  `check_transfer(account, *paths)`, which checks both.
+- `ClusterPolicy.checked_account(account)` for accounts. It returns
+  `default_account` for `None`. Pass the result on to the client. Tools that may run
+  a transfer job call `checked_transfer(account, *paths)`, which checks both.
 - `ClusterPolicy.check_group(group)` for `chgrp`.
 - `own_jobs(client, system_name, jobs, jobid)` for job queries and for tools that act
   on a job by ID, since FirecREST returns any user's job by ID.
-- `submit` reads the script itself, checks it with `ClusterPolicy.job_options`
-  (`#SBATCH` parsing is in `sbatch.py`) and submits it as `script_str`.
+- `ClusterPolicy.checked_job_options` for `submit`. It checks the arguments, not the
+  script, and returns an account and partition that always override the script's
+  `#SBATCH` lines.
 
 When changing a tool's checked parameters, update `TOOL_CALLS` (and `ACCOUNT_TOOLS`)
-in `tests/policy/test_tools.py`. The `config` fixture in `tests/policy/conftest.py`
-chdirs into a temp dir and returns a function that writes the config there.
+in `tests/policy/test_tools.py`. A new tool goes into `TOOL_CALLS`, or into
+`UNCHECKED_TOOLS` if the config controls none of its arguments. The `config` fixture
+in `tests/policy/conftest.py` chdirs into a temp dir and returns a function that
+writes the config there.
 
 `pytest` runs with `--import-mode=importlib` (set in `pyproject.toml`).

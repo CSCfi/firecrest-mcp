@@ -4,6 +4,8 @@ Lets an AI agent on your workstation, such as Claude Code or OpenCode, work on H
 clusters through FirecREST: browse and transfer files, and submit and monitor Slurm
 jobs. The agent runs locally and reaches the cluster only through this server's tools.
 A config file limits what the tools can do (see [Config file](#config-file)).
+[Restrictions](docs/restrictions.md) lists the ways the server limits the agent and what
+it doesn't restrict.
 
 The server is built for CSC's LUMI and Roihu, which get cluster-specific instructions
 for the agent. Other clusters with a FirecREST v2 API should work without them, and can
@@ -106,19 +108,16 @@ your home directory or other places with credentials, such as `~/.ssh`, in
 
 ### Jobs
 
-The `submit` tool checks the job options in both its arguments and the job script's
-`#SBATCH` lines. The account, partition and reservation must be listed in the config,
-and the working directory and the output, error and input files must be under
-`remote_paths`. The tool also refuses `SBATCH_*` and `SLURM_*` environment variables,
-which could set job options around these checks. The checks only cover job options, so
-**a job's commands still run with all of your permissions.**
+The `submit` tool checks the account, partition and reservation in its arguments, which
+must be listed in the config, and the working directory, which must be under
+`remote_paths`. It always passes an account and partition, using `default_account` and
+`default_partition` when the agent gives none. These override the job script's `#SBATCH`
+lines, as command-line options do with `sbatch`. For example, a job submitted with
+`account="project_1"` and `#SBATCH -A project_2` is billed to `project_1`.
 
-If both the `submit` tool's arguments and the job script's `#SBATCH` lines set an
-account, both accounts must be listed in the config. **Where they differ, the argument
-wins**, as command-line options do with `sbatch`. For example, a job submitted with
-`account="project_1"` and `#SBATCH -A project_2` is billed to `project_1`. The same goes
-for the partition. When neither the arguments nor the script set an account, the job
-uses `default_account`, and likewise `default_partition` for the partition.
+**The tool doesn't check the job script.** The script can set an unlisted reservation if
+the agent doesn't pass one, and its commands run with all of your permissions, also
+outside `remote_paths`.
 
 **Transfer jobs run in the partition that FirecREST is set up to use for them
 (`interactive` on LUMI and Roihu), even if `partitions` in the config doesn't list it.**

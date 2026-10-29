@@ -5,20 +5,20 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from firecrest_mcp.policy import check_local_paths, cluster_name, load_cluster
+from firecrest_mcp.policy import check_local_paths, cluster_name, load_cluster_policy
 
 
 def test_missing_file_denies_everything(config):
     """Without a config file, nothing is allowed."""
     with pytest.raises(ToolError, match="does not exist"):
-        load_cluster()
+        load_cluster_policy()
 
 
 def test_unconfigured_cluster_denied(config):
     """A cluster without a table is denied."""
     config('[roihu]\nremote_paths = ["/scratch/project_1"]\n')
     with pytest.raises(ToolError, match=r"no \[lumi\] table"):
-        load_cluster()
+        load_cluster_policy()
 
 
 def test_clusters_are_separate(config, monkeypatch):
@@ -27,11 +27,11 @@ def test_clusters_are_separate(config, monkeypatch):
         '[lumi]\nremote_paths = ["/scratch/project_1"]\n'
         '[roihu]\nremote_paths = ["/scratch/project_2"]\n'
     )
-    load_cluster().check_remote_paths("/scratch/project_1/file")
+    load_cluster_policy().check_remote_paths("/scratch/project_1/file")
     monkeypatch.setenv("FIRECREST_URL", "https://api.roihu.csc.fi/v1")
-    load_cluster().check_remote_paths("/scratch/project_2/file")
+    load_cluster_policy().check_remote_paths("/scratch/project_2/file")
     with pytest.raises(ToolError, match="is not in remote_paths"):
-        load_cluster().check_remote_paths("/scratch/project_1/file")
+        load_cluster_policy().check_remote_paths("/scratch/project_1/file")
 
 
 @pytest.mark.parametrize(
@@ -85,7 +85,7 @@ def test_invalid_config_rejected(config, content, error):
     """Syntax errors, unknown keys, wrong types and stray defaults are reported."""
     config(content)
     with pytest.raises(ToolError, match=error):
-        load_cluster()
+        load_cluster_policy()
 
 
 @pytest.mark.parametrize(
@@ -96,45 +96,45 @@ def test_example_config_is_valid(config, monkeypatch, url):
     example = Path(__file__).parents[2] / "examples" / "firecrest-mcp.toml"
     config(example.read_text())
     monkeypatch.setenv("FIRECREST_URL", url)
-    assert load_cluster().remote_paths
+    assert load_cluster_policy().remote_paths
 
 
 def test_changes_apply_without_reload(config):
     """Edits to the config file apply without a restart."""
     config('[lumi]\nremote_paths = ["/scratch/project_1/"]\n')
-    load_cluster().check_remote_paths("/scratch/project_1/file")
+    load_cluster_policy().check_remote_paths("/scratch/project_1/file")
     config('[lumi]\nremote_paths = ["/scratch/project_2/"]\n')
     with pytest.raises(ToolError):
-        load_cluster().check_remote_paths("/scratch/project_1/file")
+        load_cluster_policy().check_remote_paths("/scratch/project_1/file")
 
 
 def test_account_defaults(config):
     """A missing account becomes the default; a given one must be allowed."""
     config()
-    cluster = load_cluster()
-    assert cluster.account(None) == "project_1"
-    assert cluster.account("project_2") == "project_2"
+    cluster = load_cluster_policy()
+    assert cluster.checked_account(None) == "project_1"
+    assert cluster.checked_account("project_2") == "project_2"
     with pytest.raises(ToolError, match="Account 'project_3' is not in accounts"):
-        cluster.account("project_3")
+        cluster.checked_account("project_3")
 
 
 def test_account_without_default_required(config):
     """Without default_account, an account must be given."""
     config('[lumi]\naccounts = ["project_1"]\n')
     with pytest.raises(ToolError, match="No account given"):
-        load_cluster().account(None)
+        load_cluster_policy().checked_account(None)
 
 
 def test_group(config):
     """Only listed groups are allowed, and a missing groups allows none."""
     config()
-    load_cluster().check_group("project_1")
+    load_cluster_policy().check_group("project_1")
     for group in ["other", ""]:
         with pytest.raises(ToolError, match="is not in groups"):
-            load_cluster().check_group(group)
+            load_cluster_policy().check_group(group)
     config("[lumi]\n")
     with pytest.raises(ToolError, match="is not in groups"):
-        load_cluster().check_group("project_1")
+        load_cluster_policy().check_group("project_1")
 
 
 @pytest.fixture

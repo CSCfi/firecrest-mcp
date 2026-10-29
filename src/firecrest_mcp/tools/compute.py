@@ -1,6 +1,5 @@
 """Tools for Slurm jobs: submitting, querying, cancelling and attaching to them."""
 
-from pathlib import Path
 from typing import Annotated
 
 import cachetools.func
@@ -8,7 +7,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from firecrest.v2 import Firecrest
 
-from firecrest_mcp.policy import check_local_paths, load_cluster, own_jobs
+from firecrest_mcp.policy import check_local_paths, load_cluster_policy, own_jobs
 from firecrest_mcp.tools.params import SystemName
 
 
@@ -33,8 +32,8 @@ class FirecrestComputeToolsMixin:
         reservation: Annotated[str | None, "the reservation to run in"] = None,
     ) -> dict:
         """Submit a job. Exactly one of script_str, script_local_path or
-        script_remote_path must be given. The account and partition arguments
-        override the script's #SBATCH lines.
+        script_remote_path must be given. The account and partition, or their
+        defaults from the config, override the script's #SBATCH lines.
         """
         scripts = [script_str, script_local_path, script_remote_path]
         if sum(script is not None for script in scripts) != 1:
@@ -42,26 +41,18 @@ class FirecrestComputeToolsMixin:
                 "Exactly one of script_str, script_local_path or script_remote_path"
                 " must be given."
             )
-        cluster = load_cluster()
+        cluster = load_cluster_policy()
         cluster.check_remote_paths(working_dir, script_remote_path)
-        # The script is read here and submitted as a string, so the checked script
-        # is the one that runs even if the file changes in between.
-        if script_local_path is not None:
-            check_local_paths(script_local_path)
-            try:
-                script_str = Path(script_local_path).read_text()
-            except OSError as e:
-                raise ToolError(f"Could not read job script: {e}") from e
-        elif script_remote_path is not None:
-            script_str = self.client.view(system_name, path=script_remote_path)
-        assert script_str is not None
-        account, partition = cluster.job_options(
-            script_str, working_dir, env_vars, account, partition, reservation
+        check_local_paths(script_local_path)
+        account, partition = cluster.checked_job_options(
+            account, partition, reservation
         )
         return self.client.submit(
             system_name,
             working_dir=working_dir,
             script_str=script_str,
+            script_local_path=script_local_path,
+            script_remote_path=script_remote_path,
             env_vars=env_vars,
             account=account,
             partition=partition,
