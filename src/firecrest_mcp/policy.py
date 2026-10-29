@@ -1,7 +1,6 @@
 """Checks of tool arguments against the config file, .firecrest-mcp.toml."""
 
 import os
-import posixpath
 import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Self
@@ -18,7 +17,6 @@ from pydantic import (
     model_validator,
 )
 
-from firecrest_mcp import sbatch
 from firecrest_mcp.auth import token_path
 
 # Resolved against the working directory of the server process.
@@ -27,9 +25,6 @@ CONFIG_PATH = Path(".firecrest-mcp.toml")
 # Local paths that are never allowed, because writing them could change the server's
 # or the agent's own configuration or run code: relative to the working directory.
 PROTECTED_LOCAL_PATHS = (CONFIG_PATH, Path(".mcp.json"), Path(".claude"), Path(".git"))
-
-# Environment variables that could set job options outside the checks.
-PROTECTED_ENV_PREFIXES = ("SBATCH_", "SLURM_")
 
 # Directories that a cluster has under two names, by cluster. Config entries and
 # checked paths are rewritten to the second name before they are compared, so
@@ -41,11 +36,11 @@ def _config_error(message: str) -> ToolError:
     return ToolError(f"Config file {CONFIG_PATH.absolute()}: {message}")
 
 
-def _not_allowed(what: str, value: str, key: str) -> ToolError:
-    return ToolError(f"{what} {value!r} is not in {key} in {CONFIG_PATH.absolute()}.")
+def _not_allowed(label: str, value: str, key: str) -> ToolError:
+    return ToolError(f"{label} {value!r} is not in {key} in {CONFIG_PATH.absolute()}.")
 
 
-def _default(option: str, value: str | None) -> str:
+def _require_default(option: str, value: str | None) -> str:
     if value is None:
         raise ToolError(
             f"No {option} given and default_{option} is not set in"
@@ -81,15 +76,15 @@ def cluster_name() -> str:
     return labels[0]
 
 
-def _canonical(path: str, aliases: dict[str, str]) -> PurePosixPath:
+def _normalized_path(path: str, aliases: dict[str, str]) -> PurePosixPath:
     """Return a remote path with an aliased directory replaced by its main name.
     PurePosixPath drops "." components and repeated slashes, and is_relative_to
     compares whole components, so /projectx is not under /project."""
-    canonical = PurePosixPath(path)
+    normalized = PurePosixPath(path)
     for alias, target in aliases.items():
-        if canonical.is_relative_to(alias):
-            return PurePosixPath(target, canonical.relative_to(alias))
-    return canonical
+        if normalized.is_relative_to(alias):
+            return PurePosixPath(target, normalized.relative_to(alias))
+    return normalized
 
 
 class ClusterPolicy(BaseModel):
@@ -120,7 +115,7 @@ class ClusterPolicy(BaseModel):
         remote_paths or lies below one. ``None`` values are skipped so that optional
         parameters can be passed directly."""
         aliases = PATH_ALIASES.get(cluster_name(), {})
-        allowed = [_canonical(entry, aliases) for entry in self.remote_paths]
+        allowed = [_normalized_path(entry, aliases) for entry in self.remote_paths]
         for path in paths:
             if path is None:
                 continue
@@ -130,93 +125,53 @@ class ClusterPolicy(BaseModel):
                 raise ToolError(f"Remote path {e}.") from None
             # is_relative_to compares whole components, so /scratch/project_10 is
             # not under /scratch/project_1.
-            canonical = _canonical(path, aliases)
-            if not any(canonical.is_relative_to(entry) for entry in allowed):
+            normalized = _normalized_path(path, aliases)
+            if not any(normalized.is_relative_to(entry) for entry in allowed):
                 raise _not_allowed("Remote path", path, "remote_paths")
 
-    def account(self, account: str | None) -> str:
+    def checked_account(self, account: str | None) -> str:
         """Return the account to use: the given one if allowed, or default_account."""
         if account is None:
-            return _default("account", self.default_account)
+            return _require_default("account", self.default_account)
         if account not in self.accounts:
             raise _not_allowed("Account", account, "accounts")
         return account
 
-    def check_transfer(self, account: str | None, *paths: str) -> str:
+    def checked_transfer(self, account: str | None, *paths: str) -> str:
         """Check the remote paths of a tool that may run a transfer job, and return
         the account to use for the job."""
         self.check_remote_paths(*paths)
-        return self.account(account)
+        return self.checked_account(account)
 
     def check_group(self, group: str) -> None:
         if group not in self.groups:
             raise _not_allowed("Group", group, "groups")
 
-    def job_options(
+    def checked_job_options(
         self,
-        script: str,
-        working_dir: str | None,
-        env_vars: dict[str, str] | None,
         account: str | None,
         partition: str | None,
         reservation: str | None,
-    ) -> tuple[str | None, str | None]:
-        """Check a job's arguments and #SBATCH lines against the policy, and return
-        the account and partition to submit it with.
-
-        An argument overrides the script, as with sbatch. If only the script sets
-        the account, None is returned so that the script's account is used. If
-        neither sets it, default_account is returned. The partition works the same
-        way.
+    ) -> tuple[str, str]:
+        """Check a job's arguments against the policy, and return the account and
+        partition to submit it with: the given ones, or default_account and
+        default_partition. They are always passed, so they override the script's
+        #SBATCH lines, which are not checked.
         """
-        try:
-            directives = sbatch.parse_directives(script)
-        except ValueError as e:
-            raise ToolError(f"Job script: {e}") from e
-
-        for key in env_vars or {}:
-            if key.upper().startswith(PROTECTED_ENV_PREFIXES):
-                raise ToolError(
-                    f"Environment variable {key!r} could change job options, so it is"
-                    " not allowed."
-                )
-
         # Partitions and reservations may be comma-separated lists. An empty
         # argument is checked too, as FirecREST or Slurm would replace it with
         # their own default.
         for option, argument, allowed in [
-            ("account", account, self.accounts),
             ("partition", partition, self.partitions),
             ("reservation", reservation, self.reservations),
         ]:
-            given = directives.get(option, []) + (
-                [] if argument is None else [argument]
-            )
-            for value in (v for values in given for v in values.split(",")):
+            for value in [] if argument is None else argument.split(","):
                 if value not in allowed:
                     raise _not_allowed(option.capitalize(), value, f"{option}s")
 
-        # sbatch resolves relative paths against the job's working directory, which
-        # the last --chdir sets.
-        base = working_dir
-        for option in ("chdir", "output", "error", "input"):
-            for value in directives.get(option, []):
-                if not value.startswith("/"):
-                    if not base:
-                        raise ToolError(
-                            f"Relative #SBATCH --{option} {value!r} needs a working"
-                            " directory."
-                        )
-                    value = posixpath.join(base, value)
-                self.check_remote_paths(value)
-                if option == "chdir":
-                    base = value
-
-        if account is None and "account" not in directives:
-            account = _default("account", self.default_account)
-        if partition is None and "partition" not in directives:
-            partition = _default("partition", self.default_partition)
-        return account, partition
+        if partition is None:
+            partition = _require_default("partition", self.default_partition)
+        return self.checked_account(account), partition
 
 
 def _read_config() -> dict:
@@ -237,7 +192,7 @@ def _read_config() -> dict:
     return data
 
 
-def load_cluster() -> ClusterPolicy:
+def load_cluster_policy() -> ClusterPolicy:
     """Return the policy for this server's cluster. Other clusters' tables are not
     read."""
     data = _read_config()

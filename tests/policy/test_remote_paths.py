@@ -3,14 +3,14 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
-from firecrest_mcp.policy import load_cluster
+from firecrest_mcp.policy import load_cluster_policy
 
 # Unless a test writes its own config, the paths below are checked against the
 # default CONFIG in conftest.py.
 
 
 def check_remote_paths(*paths: str | None) -> None:
-    load_cluster().check_remote_paths(*paths)
+    load_cluster_policy().check_remote_paths(*paths)
 
 
 @pytest.mark.parametrize(

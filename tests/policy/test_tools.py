@@ -11,6 +11,7 @@ from firecrest.v2 import Firecrest
 
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
+from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
 
 # Allowed and denied by the default CONFIG in conftest.py.
 ALLOWED = "/scratch/project_1/x"
@@ -40,6 +41,19 @@ TOOL_CALLS = [
     ("submit", ["working_dir"], ["script_local_path"], {}),
 ]
 
+# Tools without arguments that the config controls. Every other tool must be in
+# TOOL_CALLS, so that its arguments are tested.
+UNCHECKED_TOOLS = {
+    "systems",
+    "partitions",
+    "reservations",
+    "userinfo",
+    "job_info",
+    "job_metadata",
+    "cancel_job",
+    "attach_to_job",
+}
+
 # Tools with an account argument, which defaults to default_account.
 ACCOUNT_TOOLS = [
     (name, remote, local, other)
@@ -58,15 +72,13 @@ def tool_call(name, *args):
 class Tools(FirecrestFilesystemToolsMixin, FirecrestComputeToolsMixin):
     def __init__(self):
         self.client = create_autospec(Firecrest, instance=True)
-        self.client.view.return_value = "#!/bin/bash\n"
 
 
 @pytest.fixture
 def tools(config, tmp_path):
-    """Tools with the default config and an allowed local job script."""
+    """Tools with the default config and an allowed local directory."""
     config()
     (tmp_path / "data").mkdir()
-    (tmp_path / "data" / "x").write_text("#!/bin/bash\n")
     return Tools()
 
 
@@ -100,6 +112,28 @@ def client_args(tools, method):
 
 def ids(calls):
     return [f"{c[0]}-{'-'.join(c[1] + c[2])}" for c in calls]
+
+
+def test_every_tool_is_in_tool_calls():
+    """A new tool must be added to TOOL_CALLS or to UNCHECKED_TOOLS. The tools are
+    listed as server.py registers them: every callable non-dunder attribute."""
+
+    class Wrapper(
+        FirecrestComputeToolsMixin,
+        FirecrestFilesystemToolsMixin,
+        FirecrestStatusToolsMixin,
+    ):
+        pass
+
+    tools = {
+        name
+        for name in dir(Wrapper)
+        if callable(getattr(Wrapper, name)) and not name.startswith("__")
+    }
+    assert tools == {c[0] for c in TOOL_CALLS} | UNCHECKED_TOOLS, (
+        "Add a new tool to TOOL_CALLS, or to UNCHECKED_TOOLS if the config controls"
+        " none of its arguments. Remove a deleted tool from them."
+    )
 
 
 @pytest.mark.parametrize(
@@ -168,79 +202,50 @@ def submit(tools, script, **kwargs):
 
 
 @pytest.mark.parametrize(
-    ("script", "options"),
+    ("kwargs", "options"),
     [
-        # Without a working directory or remote script, a job is not blocked, and it
-        # gets the default account and partition.
-        ("#!/bin/bash", ("project_1", "small", None)),
-        # Options set in the script are checked and left to the script.
-        ("#SBATCH -A project_2 -p debug --reservation training", (None, None, None)),
+        # Without arguments, a job gets the default account and partition.
+        ({}, ("project_1", "small", None)),
+        (
+            {"account": "project_2", "partition": "debug", "reservation": "training"},
+            ("project_2", "debug", "training"),
+        ),
+        # A comma-separated list is allowed if every item in it is listed.
+        ({"partition": "small,debug"}, ("project_1", "small,debug", None)),
     ],
 )
-def test_submit_options(tools, script, options):
+def test_submit_options(tools, kwargs, options):
     """The client gets the job's account, partition and reservation."""
-    args = submit(tools, script)
+    args = submit(tools, "#!/bin/bash", **kwargs)
     assert (args["account"], args["partition"], args["reservation"]) == options
 
 
+def test_submit_overrides_script(tools):
+    """The script's #SBATCH lines aren't checked, and the default account and
+    partition are passed so that they override the script's."""
+    args = submit(tools, "#SBATCH -A project_3 -p standard\n")
+    assert (args["account"], args["partition"]) == ("project_1", "small")
+
+
 @pytest.mark.parametrize(
-    ("script", "kwargs", "error"),
+    ("kwargs", "error"),
     [
-        ("#SBATCH -A project_3", {}, "Account 'project_3' is not in"),
-        ("#SBATCH -p standard", {}, "Partition 'standard' is not in"),
-        ("#SBATCH -p small,standard", {}, "Partition 'standard' is not in"),
-        ("#SBATCH --reservation=other", {}, "Reservation 'other' is not in"),
-        ("#SBATCH --chdir=/etc", {}, "Remote path '/etc' is not in"),
-        ("#SBATCH -o /etc/out", {}, "Remote path '/etc/out' is not in"),
-        ("#SBATCH -e ../project_2/err", {}, "must not contain '..'"),
-        # A directive the parser can't read stops the job.
-        ("#SBATCH -A", {}, "Job script: "),
-        # Environment variables that set Slurm options, in any letter case.
-        ("", {"env_vars": {"SBATCH_ACCOUNT": "x"}}, "could change job options"),
-        ("", {"env_vars": {"slurm_partition": "x"}}, "could change job options"),
+        ({"account": "project_3"}, "Account 'project_3' is not in"),
+        ({"partition": "standard"}, "Partition 'standard' is not in"),
+        ({"partition": "small,standard"}, "Partition 'standard' is not in"),
+        ({"reservation": "other"}, "Reservation 'other' is not in"),
+        ({"reservation": "training,other"}, "Reservation 'other' is not in"),
         # An empty argument is not left to FirecREST's or Slurm's default.
-        ("", {"account": ""}, "is not in"),
-        ("", {"partition": ""}, "is not in"),
-        ("", {"reservation": ""}, "is not in"),
+        ({"account": ""}, "is not in"),
+        ({"partition": ""}, "is not in"),
+        ({"reservation": ""}, "is not in"),
     ],
 )
-def test_submit_denied(tools, script, kwargs, error):
-    """Denied directives, arguments and environment variables, and unreadable
-    directives, stop the job."""
+def test_submit_denied(tools, kwargs, error):
+    """Denied arguments stop the job."""
     with pytest.raises(ToolError, match=error):
-        submit(
-            tools,
-            f"#!/bin/bash\n{script}\n",
-            working_dir="/scratch/project_1",
-            **kwargs,
-        )
+        submit(tools, "#!/bin/bash\n", working_dir="/scratch/project_1", **kwargs)
     tools.client.submit.assert_not_called()
-
-
-def test_submit_relative_output(tools):
-    """Relative output paths are resolved against the working directory."""
-    submit(tools, "#SBATCH -o out\n", working_dir="/scratch/project_1")
-    with pytest.raises(ToolError, match="needs a working directory"):
-        submit(tools, "#SBATCH -o out\n")
-    with pytest.raises(ToolError, match="is not in"):
-        submit(tools, "#SBATCH -D /etc\n#SBATCH -o out\n")
-
-
-def test_submit_remote_script_checked(tools):
-    """A remote script is read and its directives are checked."""
-    tools.client.view.return_value = "#SBATCH -A project_3\n"
-    with pytest.raises(ToolError, match="Account 'project_3'"):
-        tools.submit("lumi", None, script_remote_path=ALLOWED)
-    tools.client.submit.assert_not_called()
-
-
-def test_submit_sends_checked_script(tools):
-    """The script that was checked is submitted as a string."""
-    tools.submit("lumi", None, script_local_path=ALLOWED_LOCAL)
-    args = client_args(tools, "submit")
-    assert args["script_str"] == "#!/bin/bash\n"
-    assert args["script_local_path"] is None
-    assert args["script_remote_path"] is None
 
 
 def test_submit_needs_exactly_one_script(tools):
@@ -253,18 +258,12 @@ def test_submit_needs_exactly_one_script(tools):
 
 
 def test_submit_without_default_partition(config):
-    """Without default_partition, a partition must be given somewhere."""
+    """Without default_partition, a partition must be given as an argument."""
     config('[lumi]\naccounts = ["p"]\ndefault_account = "p"\npartitions = ["small"]\n')
     tools = Tools()
     with pytest.raises(ToolError, match="No partition given"):
-        tools.submit("lumi", None, script_str="#!/bin/bash")
-    tools.submit("lumi", None, script_str="#SBATCH -p small")
-    tools.client.submit.assert_called_once()
-
-
-def test_submit_paths_use_lumi_alias(tools):
-    """The /project alias also applies to paths in #SBATCH directives."""
-    submit(tools, "#SBATCH -D /project/project_1\n#SBATCH -o out\n")
+        tools.submit("lumi", None, script_str="#SBATCH -p small")
+    tools.submit("lumi", None, script_str="#!/bin/bash", partition="small")
     tools.client.submit.assert_called_once()
 
 
@@ -298,6 +297,13 @@ def test_chgrp_keeps_owner(tools):
     tools.client.chown.assert_called_once_with(
         "lumi", path=ALLOWED, owner="", group="project_1"
     )
+
+
+def test_compress_has_no_match_pattern(tools):
+    """match_pattern is never passed, as FirecREST puts it into a shell command
+    without escaping it."""
+    tools.compress("lumi", ALLOWED, ALLOWED)
+    assert client_args(tools, "compress")["match_pattern"] is None
 
 
 @pytest.mark.parametrize("mode", ["u+x", "700'; rm -rf ~; '", "7000a", "75", ""])
