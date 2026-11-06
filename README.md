@@ -21,17 +21,10 @@ cd firecrest-mcp
 uv tool install .
 ```
 
-Add the server to your agent's global MCP configuration once for each cluster you want
-to use. This makes it available wherever you start the agent.
-`examples/claude-code/mcp.json` and `examples/opencode/opencode.json` have entries for
-LUMI and Roihu that you can add to your Claude Code or OpenCode configuration. They
-start the server with `uvx firecrest-mcp`, which runs the version installed with
-`uv tool install .`.
-
 To update the server, pull the latest changes in the repo and run
 `uv tool install --reinstall .` there.
 
-## Usage
+## Setup
 
 Get a FirecREST token (for LUMI and Roihu, see
 [CSC's documentation](https://docs.csc.fi/computing/firecrest/)) and save it
@@ -45,6 +38,38 @@ chmod 600 ~/.firecrest-token
 nano ~/.firecrest-token   # or any text editor: paste the token and save
 ```
 
+Each local project you use with FirecREST gets its own config file,
+`.firecrest-mcp.toml`, which limits what the agent working in that project can do on the
+clusters. Copy the example config into the project directory:
+
+```bash
+cp path/to/firecrest-mcp/examples/firecrest-mcp.toml .firecrest-mcp.toml
+```
+
+Then edit it (see [Config file](#config-file)). The server reads it on every call, so
+changes take effect without restarting the agent. The server looks for the config in the
+directory it starts in, which depends on how it runs.
+
+## Connecting
+
+The server uses stdio by default, and the agent starts the server from its MCP
+configuration. We strongly recommend running the agent in a container instead, so that
+it can only reach the files you mount into it, and not your FirecREST token or other
+credentials. The agent then connects over HTTP to a server you start outside the
+container.
+
+### stdio
+
+Add the server to your agent's global MCP configuration once for each cluster you want
+to use. This makes it available wherever you start the agent.
+`examples/claude-code/mcp.json` and `examples/opencode/opencode.json` have entries for
+LUMI and Roihu that you can add to your Claude Code or OpenCode configuration. They
+start the server with `uvx firecrest-mcp`, which runs the version installed with
+`uv tool install .`.
+
+Start the agent from the project directory, because the server starts there too and
+reads the project's config there.
+
 To keep the token somewhere else, set the `FIRECREST_TOKEN_PATH` environment variable in
 each server's entry in your MCP configuration. In Claude Code:
 
@@ -57,17 +82,12 @@ each server's entry in your MCP configuration. In Claude Code:
 
 OpenCode calls the same setting `environment`.
 
-Each local project you use with FirecREST gets its own config file,
-`.firecrest-mcp.toml`, which limits what the agent working in that project can do on the
-clusters. Copy the example config into the project directory:
+### HTTP
 
-```bash
-cp path/to/firecrest-mcp/examples/firecrest-mcp.toml .firecrest-mcp.toml
-```
-
-Then edit it (see [Config file](#config-file)). The server reads it on every call, so
-changes take effect without restarting the agent. The server looks for the config in the
-directory the agent starts in, so start the agent from the project directory.
+If the agent runs in a container, start the server outside the container from the
+project directory, and let the agent connect to it over HTTP. The token then stays
+outside the container. [Connecting over HTTP](docs/http.md) gives the commands for the
+server, Podman and the agent.
 
 ## Config file
 

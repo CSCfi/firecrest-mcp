@@ -28,6 +28,11 @@ Claude Code must be restarted to pick up code changes. `examples/` holds end-use
 client configs that use `uvx` against the `uv tool install .` copy, and a sample
 `firecrest-mcp.toml` that a test loads.
 
+`main()` in `src/firecrest_mcp/__init__.py` runs the server over stdio by default.
+`--transport http` with `--host`, `--port` and `--allowed-host` serves an agent in a
+container on the same workstation. Over HTTP the server always checks the `Host`
+header, and `--allowed-host` adds names to `127.0.0.1`, `localhost` and `::1`.
+
 ## Architecture
 
 An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
