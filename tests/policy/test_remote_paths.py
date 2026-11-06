@@ -86,7 +86,7 @@ def test_other_special_characters_allowed(config):
         pytest.param('["/scratch/*"]', "/scratch/project_1/file", id="not-a-pattern"),
         pytest.param('["/project/project_1"]', "/projappl/project_2/x", id="alias"),
         pytest.param(
-            '["/project/project_1"]', "/projectx/project_1", id="alias-prefix"
+            '["/projapplx/project_1"]', "/projectx/project_1/f", id="alias-prefix"
         ),
     ],
 )
