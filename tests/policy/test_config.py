@@ -12,6 +12,8 @@ def test_missing_file_denies_everything(config):
     """Without a config file, nothing is allowed."""
     with pytest.raises(ToolError, match="does not exist"):
         load_cluster_policy()
+    with pytest.raises(ToolError, match="does not exist"):
+        check_local_paths("data")
 
 
 def test_unconfigured_cluster_denied(config):

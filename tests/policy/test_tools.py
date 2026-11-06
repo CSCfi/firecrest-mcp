@@ -173,7 +173,7 @@ def test_tool_with_denied_argument_does_not_call_client(
     """Any denied argument stops the tool before it calls the client."""
     with pytest.raises(ToolError, match="is not in"):
         call(tools, name, remote_args, local_args, other_args, **denied)
-    client_method(tools, name).assert_not_called()
+    assert not tools.client.method_calls
 
 
 @pytest.mark.parametrize(
@@ -190,7 +190,7 @@ def test_tool_uses_default_account(tools, name, remote_args, local_args, other_a
 
 def test_upload_filename_cannot_escape_directory(tools):
     """A filename with '..' cannot move an upload out of its directory."""
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="must not contain '..'"):
         tools.upload("lumi", "data/x", "/scratch/project_1", "../project_2/f")
     tools.client.upload.assert_not_called()
 
@@ -222,7 +222,8 @@ def test_submit_options(tools, kwargs, options):
 
 def test_submit_overrides_script(tools):
     """The script's #SBATCH lines aren't checked, and the default account and
-    partition are passed so that they override the script's."""
+    partition are passed even when the script sets its own. FirecREST passes them to
+    sbatch as --account and --partition, which take precedence over #SBATCH lines."""
     args = submit(tools, "#SBATCH -A project_3 -p standard\n")
     assert (args["account"], args["partition"]) == ("project_1", "small")
 
@@ -292,7 +293,8 @@ def test_read_file_first_and_last_lines(tools):
 
 
 def test_chgrp_keeps_owner(tools):
-    """chgrp changes only the group: an empty owner leaves the owner as it is."""
+    """chgrp calls chown with an empty owner. That is the default of FirecREST's
+    chown request, and FirecREST then changes only the group."""
     tools.chgrp("lumi", ALLOWED, "project_1")
     tools.client.chown.assert_called_once_with(
         "lumi", path=ALLOWED, owner="", group="project_1"
