@@ -33,6 +33,28 @@ def test_registered_tools(monkeypatch):
     assert {tool.name for tool in tools} == expected | {"config"}
 
 
+def test_instructions(monkeypatch):
+    """The instructions start with the ground rules, followed by the cluster's context
+    if it has one."""
+    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
+    server = importlib.import_module("firecrest_mcp.server")
+    rules = server.GROUND_RULES.read_text()
+    assert rules.startswith("### Ground rules\n")
+    assert server.instructions_for("lumi") == "\n".join(
+        [rules, (server.CONTEXT_DIR / "lumi.md").read_text()]
+    )
+    assert server.instructions_for("hpc") == rules
+
+
+def test_context_headers(monkeypatch):
+    """Each cluster's context starts with a ### header, so that it nests under the
+    client's header for the server."""
+    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
+    server = importlib.import_module("firecrest_mcp.server")
+    for path in server.CONTEXT_DIR.glob("*.md"):
+        assert path.read_text().startswith("### "), path.name
+
+
 @pytest.fixture
 def run(monkeypatch):
     """Replaces mcp.run of the server and returns the keyword arguments of each call."""

@@ -1,3 +1,5 @@
+### LUMI
+
 LUMI partitions, all x86_64:
  - LUMI-C: 2x AMD EPYC Milan (Zen 3, AVX2, no AVX-512), 128 cores / 256 threads, 224 GiB/node
  - LUMI-G: 4x AMD MI250X = 8 GCDs/node, 56 usable cores, 480 GiB/node

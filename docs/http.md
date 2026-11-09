@@ -41,10 +41,9 @@ Podman:
 podman run --network pasta:-T,8000 <other options> <image> <agent command>
 ```
 
-For two servers on ports 8000 and 8001, use `-T,8000-8001`. pasta listens on the
-forwarded port inside the container, so a program in the container, such as a
-development server, can't use that port. If that conflicts, start the server with
-another `--port` and forward that port.
+For two servers on ports 8000 and 8001, use `-T,8000-8001`. The forwarded port is
+taken inside the container as well, so if a program there needs it, start the server
+with another `--port` and forward that port.
 
 The server rejects a request whose `Host` header is not `127.0.0.1`, `localhost`,
 `::1`, the `--host` address or a name given with `--allowed-host`. This stops a web page
@@ -76,5 +75,4 @@ IPv4.
 For a second server, add another entry with its port in the URL.
 `examples/claude-code/http.json` has entries for LUMI on port 8000 and Roihu on port
 8001. The file uses Claude Code's format. Other agents use similar fields, so adapt the
-entries to your agent's MCP configuration. In OpenCode, for example, the entry has
-`"type": "remote"` and the same `url`.
+entries to your agent's MCP configuration.

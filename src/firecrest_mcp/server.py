@@ -32,13 +32,21 @@ if not url:
     raise RuntimeError("Environment variable FIRECREST_URL is not defined.")
 
 fc = FirecrestClientWrapper(url)
-# Instructions for the agent about the cluster, from context/<cluster>.md if there is
-# one.
-CONTEXT_DIR = Path(__file__).parent / "context"
-context = {path.stem: path for path in CONTEXT_DIR.glob("*.md")}.get(cluster_name())
-instructions = context.read_text() if context else None
 
-mcp = FastMCP("FirecREST v2", instructions=instructions)
+# Rules for the agent that every server sends, outside context/ because every file
+# there is a cluster's.
+GROUND_RULES = Path(__file__).parent / "ground_rules.md"
+CONTEXT_DIR = Path(__file__).parent / "context"
+
+
+def instructions_for(cluster: str) -> str:
+    """Returns the ground rules, followed by context/<cluster>.md if there is one."""
+    context = {path.stem: path for path in CONTEXT_DIR.glob("*.md")}.get(cluster)
+    parts = [GROUND_RULES, context] if context else [GROUND_RULES]
+    return "\n".join(part.read_text() for part in parts)
+
+
+mcp = FastMCP("FirecREST v2", instructions=instructions_for(cluster_name()))
 
 for name in dir(fc):
     attr = getattr(fc, name)
