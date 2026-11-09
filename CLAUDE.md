@@ -23,9 +23,12 @@ by hand when the format hook fails.
 
 Running the server needs `FIRECREST_URL` (e.g. `https://api.lumi.csc.fi/v1`) and a
 token file at `~/.firecrest-token` (or `FIRECREST_TOKEN_PATH`) with mode 600.
-`.mcp.json` starts the checked-out code via `uv run firecrest-mcp` for LUMI and Roihu;
-Claude Code must be restarted to pick up code changes. `examples/` holds end-user
-client configs that use `uvx` against the `uv tool install .` copy, and a sample
+`examples/claude-code/` holds Claude Code configs with entries for LUMI and Roihu.
+`stdio.json` runs the `uv tool install .` copy as `firecrest-mcp`. `stdio-dev.json`
+runs the checked-out code with `uv run firecrest-mcp`, and Claude Code must be
+restarted to pick up code changes. `http.json` connects to servers on ports 8000 and
+8001, which must be restarted instead. A developer copies `stdio-dev.json` or
+`http.json` to `.mcp.json` in the repo root, which git ignores. `examples/` also holds a sample
 `firecrest-mcp.toml` that a test loads.
 
 `main()` in `src/firecrest_mcp/__init__.py` runs the server over stdio by default.
@@ -60,7 +63,7 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
   `FIRECREST_URL`.
 - **Per-system instructions**: `context/<cluster>.md`, if it exists, is passed as the
   FastMCP `instructions`, where `<cluster>` is `cluster_name()` (see below). One server
-  process serves one system; `.mcp.json` runs two instances.
+  process serves one system, so each config has two entries.
 - **Auth** (`auth.py`, tested in `tests/test_auth.py`): `TokenAuth.get_access_token`
   re-reads the token file on every request (so users can refresh it in place), refuses
   it if group/other permission bits are set, and checks the JWT `exp` without
