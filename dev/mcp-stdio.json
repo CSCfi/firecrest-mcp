@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "firecrest-lumi": {
+    "firecrest-lumi-dev": {
       "type": "stdio",
       "command": "uv",
       "args": ["run", "firecrest-mcp"],
@@ -8,7 +8,7 @@
         "FIRECREST_URL": "https://api.lumi.csc.fi/v1"
       }
     },
-    "firecrest-roihu": {
+    "firecrest-roihu-dev": {
       "type": "stdio",
       "command": "uv",
       "args": ["run", "firecrest-mcp"],

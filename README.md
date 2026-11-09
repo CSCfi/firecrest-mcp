@@ -62,7 +62,7 @@ container.
 
 Add the server to your agent's global MCP configuration once for each cluster you want
 to use. This makes it available wherever you start the agent.
-`examples/claude-code/stdio.json` has entries for LUMI and Roihu that you can add to
+`examples/claude-code/mcp-stdio.json` has entries for LUMI and Roihu that you can add to
 your Claude Code configuration. They start the server with `firecrest-mcp`, which runs
 the version installed with `uv tool install .`. The file uses Claude Code's format.
 Other agents use similar fields, often the same `command`, `args` and `env`, so adapt
@@ -179,13 +179,13 @@ server won't start without it. To adapt the server to another cluster:
 
 The repo is set up as a project of its own, with a `.firecrest-mcp.toml` in the repo
 root that git ignores. To run the checked-out code, copy
-`examples/claude-code/stdio-dev.json` or `examples/claude-code/http.json` to `.mcp.json`
-in the repo root, which git also ignores. The servers in `.mcp.json` take precedence
-over your global servers of the same name.
+`dev/mcp-stdio.json` or `dev/mcp-http.json` to `.mcp.json` in the repo root, which
+git also ignores. Their servers are named `firecrest-lumi-dev` and
+`firecrest-roihu-dev`, so they don't clash with servers you installed for normal use.
 
-- `stdio-dev.json` starts the server with `uv run firecrest-mcp`.
+- `mcp-stdio.json` starts the server with `uv run firecrest-mcp`.
   Restart Claude Code after switching branches or editing the code.
-- `http.json` connects to servers on ports 8000 and 8001. Start
+- `mcp-http.json` connects to servers on ports 8000 and 8001. Start
   them from the repo root with `uv run firecrest-mcp --transport http`, as
   [Connecting over HTTP](docs/http.md) describes, and restart them after switching
   branches or editing the code.

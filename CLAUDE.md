@@ -24,12 +24,14 @@ by hand when the format hook fails.
 Running the server needs `FIRECREST_URL` (e.g. `https://api.lumi.csc.fi/v1`) and a
 token file at `~/.firecrest-token` (or `FIRECREST_TOKEN_PATH`) with mode 600.
 `examples/claude-code/` holds Claude Code configs with entries for LUMI and Roihu.
-`stdio.json` runs the `uv tool install .` copy as `firecrest-mcp`. `stdio-dev.json`
-runs the checked-out code with `uv run firecrest-mcp`, and Claude Code must be
-restarted to pick up code changes. `http.json` connects to servers on ports 8000 and
-8001, which must be restarted instead. A developer copies `stdio-dev.json` or
-`http.json` to `.mcp.json` in the repo root, which git ignores. `examples/` also holds a sample
-`firecrest-mcp.toml` that a test loads.
+`mcp-stdio.json` runs the `uv tool install .` copy as `firecrest-mcp`, and
+`mcp-http.json` connects to servers on ports 8000 and 8001. The top-level `dev/` holds
+the same two for development, with servers named `firecrest-lumi-dev` and `firecrest-roihu-dev` so
+they don't clash with installed ones. `dev/mcp-stdio.json` runs the checked-out code
+with `uv run firecrest-mcp`, and Claude Code must be restarted to pick up code changes.
+Servers behind `dev/mcp-http.json` must be restarted instead. A developer copies one of
+them to `.mcp.json` in the repo root, which git ignores. `examples/` also holds a
+sample `firecrest-mcp.toml` that a test loads.
 
 `main()` in `src/firecrest_mcp/__init__.py` runs the server over stdio by default.
 `--transport http` with `--host`, `--port` and `--allowed-host` serves an agent in a
