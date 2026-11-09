@@ -37,3 +37,6 @@ Avoid many small files (e.g. plain Conda; use containers or squashfs).
 **LUMI-C/G nodes have no local disk: `/tmp` is in RAM and counts against job
 memory.** For I/O-heavy work use `/flash/<project>` (billed 3x) and copy results
 back to `/scratch` or `/project`.
+
+`/project` and `/projappl` are the same directory. A path under one is allowed
+wherever the config allows the other.
