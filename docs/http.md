@@ -73,5 +73,8 @@ Write `127.0.0.1` and not `localhost`. The agent may try `localhost` as the IPv6
 address `::1` first, and then the connection fails because the server listens only on
 IPv4.
 
-For a second server, add another entry with its port in the URL. In OpenCode, the entry
-has `"type": "remote"` and the same `url`.
+For a second server, add another entry with its port in the URL.
+`examples/claude-code/http.json` has entries for LUMI on port 8000 and Roihu on port
+8001. The file uses Claude Code's format. Other agents use similar fields, so adapt the
+entries to your agent's MCP configuration. In OpenCode, for example, the entry has
+`"type": "remote"` and the same `url`.

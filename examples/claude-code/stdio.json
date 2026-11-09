@@ -2,16 +2,14 @@
   "mcpServers": {
     "firecrest-lumi": {
       "type": "stdio",
-      "command": "uvx",
-      "args": ["firecrest-mcp"],
+      "command": "firecrest-mcp",
       "env": {
         "FIRECREST_URL": "https://api.lumi.csc.fi/v1"
       }
     },
     "firecrest-roihu": {
       "type": "stdio",
-      "command": "uvx",
-      "args": ["firecrest-mcp"],
+      "command": "firecrest-mcp",
       "env": {
         "FIRECREST_URL": "https://api.roihu.csc.fi/v1"
       }
