@@ -13,7 +13,7 @@ cluster: `https://api.lumi.csc.fi/v1` for LUMI or
 
 ```bash
 cd path/to/project
-FIRECREST_URL=https://api.lumi.csc.fi/v1 firecrest-mcp --transport http --allowed-host host-loopback
+FIRECREST_URL=https://api.lumi.csc.fi/v1 firecrest-mcp --transport http
 ```
 
 The server runs until you stop it with Ctrl+C. To use a second cluster, start another
@@ -29,28 +29,29 @@ project into the container at the same path, so that a path the agent gives the 
 means the same file on both sides.
 
 The server listens only on `127.0.0.1`, so any process on the workstation can connect
-to the port and use the tools with your token, within the limits of the config. Don't
-set `--host 0.0.0.0` to let the container in, because other machines could then do the
-same. The next paragraph shows how the container reaches `127.0.0.1` instead.
+to the port and use the tools with your token, within the limits of the config.
 
-A container can't reach the workstation's `127.0.0.1` by default. Give the container an
-address that leads there, under the name `host-loopback`. How to do that depends on the
-container runtime. For example, with Podman:
+A container can't reach the workstation's `127.0.0.1` by default. Don't set
+`--host 0.0.0.0` to let the container in, because other machines could then do the
+same. Instead, forward the server's port from the container's `127.0.0.1` to the
+workstation's. How to do that depends on the container runtime. For example, with
+Podman:
 
 ```bash
-podman run --network pasta:--map-host-loopback,169.254.1.3 \
-  --add-host host-loopback:169.254.1.3 \
-  <other options> <image> <agent command>
+podman run --network pasta:-T,8000 <other options> <image> <agent command>
 ```
 
-Here `--network` makes `169.254.1.3` in the container lead to the workstation's
-`127.0.0.1`, and `--add-host` names that address `host-loopback`.
+For two servers on ports 8000 and 8001, use `-T,8000-8001`. pasta listens on the
+forwarded port inside the container, so a program in the container, such as a
+development server, can't use that port. If that conflicts, start the server with
+another `--port` and forward that port.
 
-The server rejects a request if its `Host` header is not `127.0.0.1`, `localhost`,
-`::1` or a name given with `--allowed-host`. Without this check, a web page open in your
-browser could use DNS rebinding to reach the server and call its tools, for example to
-submit a job. The container connects to `host-loopback`, so it sends that name as the
-`Host` header, which `--allowed-host host-loopback` allows.
+The server rejects a request whose `Host` header is not `127.0.0.1`, `localhost`,
+`::1`, the `--host` address or a name given with `--allowed-host`. This stops a web page
+in your browser from reaching the server through DNS rebinding. The agent sends the
+host from its URL, which is `127.0.0.1` with the forwarded port. If your setup gives the
+agent another name or address, such as `host.docker.internal`, add it with
+`--allowed-host`.
 
 ## Configuring the agent
 
@@ -62,11 +63,15 @@ Claude Code:
   "mcpServers": {
     "firecrest-lumi": {
       "type": "http",
-      "url": "http://host-loopback:8000/mcp"
+      "url": "http://127.0.0.1:8000/mcp"
     }
   }
 }
 ```
+
+Write `127.0.0.1` and not `localhost`. The agent may try `localhost` as the IPv6
+address `::1` first, and then the connection fails because the server listens only on
+IPv4.
 
 For a second server, add another entry with its port in the URL. In OpenCode, the entry
 has `"type": "remote"` and the same `url`.

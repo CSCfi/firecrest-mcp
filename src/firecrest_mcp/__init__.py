@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> None:
         action="append",
         default=[],
         help="host name that clients may send in the Host header over HTTP, besides "
-        "127.0.0.1, localhost and ::1 (may be repeated)",
+        "127.0.0.1, localhost, ::1 and the --host address (may be repeated)",
     )
     args = parser.parse_args(argv)
     if args.transport == "stdio" and (
