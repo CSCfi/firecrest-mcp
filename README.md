@@ -4,7 +4,7 @@ Lets an AI agent on your workstation, such as Claude Code or OpenCode, work on H
 clusters through FirecREST: browse and transfer files, and submit and monitor Slurm
 jobs. The agent runs locally and reaches the cluster only through this server's tools.
 A config file limits what the tools can do (see [Config file](#config-file)).
-[Restrictions](docs/restrictions.md) lists the ways the server limits the agent and what
+[Safeguards](docs/safeguards.md) lists the ways the server limits the agent and what
 it doesn't restrict.
 
 The server is built for CSC's LUMI and Roihu, which get cluster-specific instructions
@@ -95,7 +95,8 @@ Tools only accept what the project's `.firecrest-mcp.toml` allows. A missing fil
 or key allows none of the operations it controls, and unknown keys are errors. Each
 cluster has a table named after its `FIRECREST_URL` host (`api.roihu.csc.fi` is
 `[roihu]`), and the table covers all of the cluster's FirecREST systems (`cpu` and `gpu`
-on Roihu, `lumi` on LUMI). See `examples/firecrest-mcp.toml` for every key.
+on Roihu, `lumi` on LUMI). See `examples/firecrest-mcp.toml` for every key, and
+[Safeguards](docs/safeguards.md) for how the server applies them.
 
 Status tools, and job tools other than the `submit` tool, work without a config, since
 they only read the cluster's status or act on your own jobs, with no paths or accounts
@@ -110,39 +111,14 @@ transfer job runs. The agent can name the account when it calls the tool, or you
 The `groups` key lists the groups that the `chgrp` tool may set on a file. This lets the
 agent share a file you moved into a project directory with the project's members.
 
-### Paths
+**Don't list your home directory or other places with credentials, such as `~/.ssh`, in
+`local_paths`.** The server protects only the token file and files that could widen the
+agent's access or run commands (the config file and `.mcp.json`, `.claude/` and `.git/`
+in the project directory). It can't know where else you keep secrets, so the agent can
+send anything else in `local_paths` to the cluster.
 
-Paths on the cluster must lie in or below an entry of `remote_paths`. Wildcards such as
-`*` don't work in the entries. Remote paths must be absolute and must not contain `..`,
-single quotes or control characters. Symlinks on the cluster aren't resolved, so a link
-inside an allowed directory can lead outside it. On LUMI, `/project` and `/projappl` are
-the same directory, so the server allows both names when the config lists either.
-
-The upload, download and submit tools use paths on your workstation, which must lie in
-or below an entry of `local_paths`. Wildcards don't work here either. Local paths may be
-relative to the project directory, and they're resolved before they're checked, so a
-symlink can't lead outside `local_paths`. The config file, `.mcp.json`, `.claude/`,
-`.git/` and the token file are always denied. **Nothing else is protected, so don't list
-your home directory or other places with credentials, such as `~/.ssh`, in
-`local_paths`.**
-
-### Jobs
-
-The `submit` tool checks the account, partition and reservation in its arguments, which
-must be listed in the config, and the working directory, which must be under
-`remote_paths`. It always passes an account and partition, using `default_account` and
-`default_partition` when the agent gives none. These override the job script's `#SBATCH`
-lines, as command-line options do with `sbatch`. For example, a job submitted with
-`account="project_1"` and `#SBATCH -A project_2` is billed to `project_1`.
-
-**The tool doesn't check the job script.** The script can set an unlisted reservation if
-the agent doesn't pass one, and its commands run with all of your permissions, also
-outside `remote_paths`.
-
-**Transfer jobs run in the partition that FirecREST is set up to use for them
-(`interactive` on LUMI and Roihu), even if `partitions` in the config doesn't list it.**
-
-Job tools only show your own jobs, and refuse another user's job ID.
+**The `submit` tool doesn't check the job script.** Its commands run with all of your
+permissions, including outside `remote_paths`.
 
 ## Other clusters
 
