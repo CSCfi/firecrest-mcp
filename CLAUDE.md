@@ -31,7 +31,8 @@ client configs that use `uvx` against the `uv tool install .` copy, and a sample
 `main()` in `src/firecrest_mcp/__init__.py` runs the server over stdio by default.
 `--transport http` with `--host`, `--port` and `--allowed-host` serves an agent in a
 container on the same workstation. Over HTTP the server always checks the `Host`
-header, and `--allowed-host` adds names to `127.0.0.1`, `localhost` and `::1`.
+header, and `--allowed-host` adds names to `127.0.0.1`, `localhost`, `::1` and the
+`--host` address, which FastMCP allows by itself.
 
 ## Architecture
 
