@@ -9,7 +9,7 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from firecrest.v2 import ExternalDownload, ExternalUpload, Firecrest
 
-from firecrest_mcp.policy import check_local_paths, load_cluster_policy
+from firecrest_mcp.config import check_local_paths, load_cluster_config
 from firecrest_mcp.tools.params import (
     Account,
     Blocking,
@@ -35,7 +35,7 @@ class FirecrestFilesystemToolsMixin:
         ] = False,
     ) -> list[dict]:
         """Returns a list of files in a directory."""
-        load_cluster_policy().check_remote_paths(path)
+        load_cluster_config().check_remote_paths(path)
         return self.client.list_files(
             system_name,
             path=path,
@@ -55,7 +55,7 @@ class FirecrestFilesystemToolsMixin:
         """Read a text file: the whole file (up to 5 MB), or only its first or last
         lines.
         """
-        load_cluster_policy().check_remote_paths(path)
+        load_cluster_config().check_remote_paths(path)
         if first_lines is not None and last_lines is not None:
             raise ToolError("Give at most one of first_lines and last_lines.")
         if first_lines is not None:
@@ -70,7 +70,7 @@ class FirecrestFilesystemToolsMixin:
     @tool()
     def checksum(self, system_name: SystemName, path: RemotePath) -> dict:
         """Calculate the SHA256 (256-bit) checksum of a specified file."""
-        load_cluster_policy().check_remote_paths(path)
+        load_cluster_config().check_remote_paths(path)
         return self.client.checksum(system_name, path=path)
 
     @tool()
@@ -81,7 +81,7 @@ class FirecrestFilesystemToolsMixin:
         mode: Annotated[str, "a numeric mode, as for chmod, e.g. 750"],
     ) -> dict:
         """Changes the file mod bits of a given file according to the specified mode."""
-        load_cluster_policy().check_remote_paths(path)
+        load_cluster_config().check_remote_paths(path)
         # FirecREST puts the mode into a shell command without escaping it, so only
         # an octal number is passed on.
         if not re.fullmatch("[0-7]{3,4}", mode):
@@ -98,7 +98,7 @@ class FirecrestFilesystemToolsMixin:
         """Change the group of a file, e.g. to share it with a project. Its owner is
         not changed.
         """
-        cluster = load_cluster_policy()
+        cluster = load_cluster_config()
         cluster.check_remote_paths(path)
         cluster.check_group(group)
         # An empty owner leaves the owner as it is.
@@ -115,7 +115,7 @@ class FirecrestFilesystemToolsMixin:
         system's filesystem. The result follows:
         https://docs.python.org/3/library/os.html#os.stat_result.
         """
-        load_cluster_policy().check_remote_paths(path)
+        load_cluster_config().check_remote_paths(path)
         return self.client.stat(system_name, path=path, dereference=dereference)
 
     @tool()
@@ -126,7 +126,7 @@ class FirecrestFilesystemToolsMixin:
         link_path: Annotated[str, "the absolute path of the new link"],
     ) -> dict:
         """Create a symbolic link."""
-        load_cluster_policy().check_remote_paths(source_path, link_path)
+        load_cluster_config().check_remote_paths(source_path, link_path)
         return self.client.symlink(
             system_name, source_path=source_path, link_path=link_path
         )
@@ -139,7 +139,7 @@ class FirecrestFilesystemToolsMixin:
         create_parents: Annotated[bool, "create missing parent directories"] = False,
     ) -> dict:
         """Create a directory."""
-        load_cluster_policy().check_remote_paths(path)
+        load_cluster_config().check_remote_paths(path)
         return self.client.mkdir(system_name, path=path, create_parents=create_parents)
 
     @tool()
@@ -155,7 +155,7 @@ class FirecrestFilesystemToolsMixin:
         """Rename/move a file, directory, or symlink at the source_path to the
         target_path on system_name’s filesystem. This operation runs in a job.
         """
-        account = load_cluster_policy().checked_transfer(
+        account = load_cluster_config().checked_transfer(
             account, source_path, target_path
         )
         return self.client.mv(
@@ -179,7 +179,7 @@ class FirecrestFilesystemToolsMixin:
         blocking: Blocking = True,
     ) -> None:
         """Compress a directory or file."""
-        account = load_cluster_policy().checked_transfer(
+        account = load_cluster_config().checked_transfer(
             account, source_path, target_path
         )
         # match_pattern is left out: FirecREST puts it into a shell command without
@@ -205,7 +205,7 @@ class FirecrestFilesystemToolsMixin:
         blocking: Blocking = True,
     ) -> None:
         """Extract compressed archives."""
-        account = load_cluster_policy().checked_transfer(
+        account = load_cluster_config().checked_transfer(
             account, source_path, target_path
         )
         return self.client.extract(
@@ -229,7 +229,7 @@ class FirecrestFilesystemToolsMixin:
         timeout: Timeout = None,
     ) -> dict:
         """Copies file from source_path to target_path."""
-        account = load_cluster_policy().checked_transfer(
+        account = load_cluster_config().checked_transfer(
             account, source_path, target_path
         )
         return self.client.cp(
@@ -254,7 +254,7 @@ class FirecrestFilesystemToolsMixin:
         """Delete a file. FirecREST first tries to delete it directly, and if that
         times out, it deletes it in a transfer job.
         """
-        account = load_cluster_policy().checked_transfer(account, path)
+        account = load_cluster_config().checked_transfer(account, path)
         return self.client.rm(
             system_name,
             path=path,
@@ -281,7 +281,7 @@ class FirecrestFilesystemToolsMixin:
         job, whose information is returned.
         """
         check_local_paths(local_file)
-        account = load_cluster_policy().checked_transfer(
+        account = load_cluster_config().checked_transfer(
             account, posixpath.join(directory, filename)
         )
         return self.client.upload(
@@ -306,7 +306,7 @@ class FirecrestFilesystemToolsMixin:
     ) -> ExternalDownload | None:
         """Download a file from the remote system."""
         check_local_paths(target_path)
-        account = load_cluster_policy().checked_transfer(account, source_path)
+        account = load_cluster_config().checked_transfer(account, source_path)
         return self.client.download(
             system_name,
             source_path=source_path,

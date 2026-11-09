@@ -1,17 +1,23 @@
-"""Tests of reading the config file and of its account, group and local path checks."""
+"""Tests of reading the config file, of its account, group and local path checks,
+and of the config tool."""
 
 from pathlib import Path
 
 import pytest
 from fastmcp.exceptions import ToolError
 
-from firecrest_mcp.policy import check_local_paths, cluster_name, load_cluster_policy
+from firecrest_mcp.config import (
+    active_config,
+    check_local_paths,
+    cluster_name,
+    load_cluster_config,
+)
 
 
 def test_missing_file_denies_everything(config):
     """Without a config file, nothing is allowed."""
     with pytest.raises(ToolError, match="does not exist"):
-        load_cluster_policy()
+        load_cluster_config()
     with pytest.raises(ToolError, match="does not exist"):
         check_local_paths("data")
 
@@ -20,7 +26,7 @@ def test_unconfigured_cluster_denied(config):
     """A cluster without a table is denied."""
     config('[roihu]\nremote_paths = ["/scratch/project_1"]\n')
     with pytest.raises(ToolError, match=r"no \[lumi\] table"):
-        load_cluster_policy()
+        load_cluster_config()
 
 
 def test_clusters_are_separate(config, monkeypatch):
@@ -29,11 +35,11 @@ def test_clusters_are_separate(config, monkeypatch):
         '[lumi]\nremote_paths = ["/scratch/project_1"]\n'
         '[roihu]\nremote_paths = ["/scratch/project_2"]\n'
     )
-    load_cluster_policy().check_remote_paths("/scratch/project_1/file")
+    load_cluster_config().check_remote_paths("/scratch/project_1/file")
     monkeypatch.setenv("FIRECREST_URL", "https://api.roihu.csc.fi/v1")
-    load_cluster_policy().check_remote_paths("/scratch/project_2/file")
+    load_cluster_config().check_remote_paths("/scratch/project_2/file")
     with pytest.raises(ToolError, match="is not in remote_paths"):
-        load_cluster_policy().check_remote_paths("/scratch/project_1/file")
+        load_cluster_config().check_remote_paths("/scratch/project_1/file")
 
 
 @pytest.mark.parametrize(
@@ -87,7 +93,7 @@ def test_invalid_config_rejected(config, content, error):
     """Syntax errors, unknown keys, wrong types and stray defaults are reported."""
     config(content)
     with pytest.raises(ToolError, match=error):
-        load_cluster_policy()
+        load_cluster_config()
 
 
 @pytest.mark.parametrize(
@@ -98,22 +104,22 @@ def test_example_config_is_valid(config, monkeypatch, url):
     example = Path(__file__).parents[2] / "examples" / "firecrest-mcp.toml"
     config(example.read_text())
     monkeypatch.setenv("FIRECREST_URL", url)
-    assert load_cluster_policy().remote_paths
+    assert load_cluster_config().remote_paths
 
 
 def test_changes_apply_without_reload(config):
     """Edits to the config file apply without a restart."""
     config('[lumi]\nremote_paths = ["/scratch/project_1/"]\n')
-    load_cluster_policy().check_remote_paths("/scratch/project_1/file")
+    load_cluster_config().check_remote_paths("/scratch/project_1/file")
     config('[lumi]\nremote_paths = ["/scratch/project_2/"]\n')
     with pytest.raises(ToolError):
-        load_cluster_policy().check_remote_paths("/scratch/project_1/file")
+        load_cluster_config().check_remote_paths("/scratch/project_1/file")
 
 
 def test_account_defaults(config):
     """A missing account becomes the default; a given one must be allowed."""
     config()
-    cluster = load_cluster_policy()
+    cluster = load_cluster_config()
     assert cluster.checked_account(None) == "project_1"
     assert cluster.checked_account("project_2") == "project_2"
     with pytest.raises(ToolError, match="Account 'project_3' is not in accounts"):
@@ -124,19 +130,19 @@ def test_account_without_default_required(config):
     """Without default_account, an account must be given."""
     config('[lumi]\naccounts = ["project_1"]\n')
     with pytest.raises(ToolError, match="No account given"):
-        load_cluster_policy().checked_account(None)
+        load_cluster_config().checked_account(None)
 
 
 def test_group(config):
     """Only listed groups are allowed, and a missing groups allows none."""
     config()
-    load_cluster_policy().check_group("project_1")
+    load_cluster_config().check_group("project_1")
     for group in ["other", ""]:
         with pytest.raises(ToolError, match="is not in groups"):
-            load_cluster_policy().check_group(group)
+            load_cluster_config().check_group(group)
     config("[lumi]\n")
     with pytest.raises(ToolError, match="is not in groups"):
-        load_cluster_policy().check_group("project_1")
+        load_cluster_config().check_group("project_1")
 
 
 @pytest.fixture
@@ -201,3 +207,46 @@ def test_local_paths_must_be_strings(config, content):
     config(content)
     with pytest.raises(ToolError, match="local_paths must be a list of strings"):
         check_local_paths("data")
+
+
+def test_active_config(config):
+    """The config tool returns local_paths and this cluster's table with every
+    key."""
+    config('local_paths = ["data"]\n[lumi]\naccounts = ["p"]\n[roihu]\n')
+    assert active_config() == {
+        "local_paths": ["data"],
+        "lumi": {
+            "remote_paths": [],
+            "accounts": ["p"],
+            "default_account": None,
+            "partitions": [],
+            "default_partition": None,
+            "reservations": [],
+            "groups": [],
+        },
+    }
+
+
+def test_active_config_rereads_file(config):
+    """The config tool shows edits without a restart."""
+    config("[lumi]\n")
+    assert active_config()["lumi"]["accounts"] == []
+    config('[lumi]\naccounts = ["p"]\n')
+    assert active_config()["lumi"]["accounts"] == ["p"]
+
+
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        (None, "does not exist"),
+        ("[roihu]\n", r"no \[lumi\] table"),
+        ("[lumi]\ndefault_account = 'p'", "default_account 'p' is not in accounts"),
+        ("local_paths = 'data'\n[lumi]\n", "local_paths must be a list of strings"),
+    ],
+)
+def test_active_config_invalid(config, content, error):
+    """The config tool raises the same errors as the tools it describes."""
+    if content is not None:
+        config(content)
+    with pytest.raises(ToolError, match=error):
+        active_config()

@@ -9,7 +9,7 @@ Python ≥3.13, managed with `uv`.
 
 ```bash
 uv run pytest                                  # all tests
-uv run pytest tests/policy/test_tools.py       # one file
+uv run pytest tests/config/test_tools.py       # one file
 uv run pytest -k "symlink"                     # tests matching a name
 uv run ruff check                              # lint
 uv run ty check                                # type check
@@ -45,9 +45,11 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
   server then registers **every callable non-dunder attribute** of the wrapper as an
   MCP tool, so any helper method added to a mixin becomes a tool too — keep helpers
   out of the mixins (or make them module-level functions).
-  `tests/test_server.py` checks that the server registers exactly the mixins' tools.
-  The only list of tool names is `TOOL_CALLS` and `UNCHECKED_TOOLS` in
-  `tests/policy/test_tools.py`.
+  The `config` tool doesn't call FirecREST, so it isn't on a mixin. `server.py`
+  registers `active_config()` from `config.py` under that name.
+  `tests/test_server.py` checks that the server registers exactly the mixins' tools
+  and `config`. The only list of the mixins' tool names is `TOOL_CALLS` and
+  `UNCHECKED_TOOLS` in `tests/config/test_tools.py`.
 - **Client calls**: pass everything after `system_name` to `self.client` methods by
   keyword. pyfirecrest's untyped `_with_correlation_id` decorator hides their
   signatures from ty, so only the names catch a wrong argument. The tests' mock
@@ -68,29 +70,30 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
 
 ### Config file
 
-`policy.py` enforces `.firecrest-mcp.toml` (see README), read on every call and
+`config.py` enforces `.firecrest-mcp.toml` (see README), read on every call and
 failing closed. `cluster_name()` picks the `[<cluster>]` table from the `FIRECREST_URL`
 host; it applies to every `system_name`. Tools check all of their checked arguments
 before calling the client:
 
-- `load_cluster_policy().check_remote_paths(*paths)` for remote paths, skipping
+- `load_cluster_config().check_remote_paths(*paths)` for remote paths, skipping
   `None`. `PATH_ALIASES` lists directories a cluster reaches under two names (LUMI's
   `/project` and `/projappl`).
 - `check_local_paths(*paths)` for local paths, skipping `None`.
-- `ClusterPolicy.checked_account(account)` for accounts. It returns
+- `ClusterConfig.checked_account(account)` for accounts. It returns
   `default_account` for `None`. Pass the result on to the client. Tools that may run
   a transfer job call `checked_transfer(account, *paths)`, which checks both.
-- `ClusterPolicy.check_group(group)` for `chgrp`.
-- `own_jobs(client, system_name, jobs, jobid)` for job queries and for tools that act
-  on a job by ID, since FirecREST returns any user's job by ID.
-- `ClusterPolicy.checked_job_options` for `submit`. It checks the arguments, not the
+- `ClusterConfig.check_group(group)` for `chgrp`.
+- `own_jobs(client, system_name, jobs, jobid)` in `tools/compute.py` for job queries
+  and for tools that act on a job by ID, since FirecREST returns any user's job by ID.
+  It doesn't depend on the config.
+- `ClusterConfig.checked_job_options` for `submit`. It checks the arguments, not the
   script, and returns an account and partition that always override the script's
   `#SBATCH` lines.
 
 When changing a tool's checked parameters, update `TOOL_CALLS` (and `ACCOUNT_TOOLS`)
-in `tests/policy/test_tools.py`. A new tool goes into `TOOL_CALLS`, or into
+in `tests/config/test_tools.py`. A new tool goes into `TOOL_CALLS`, or into
 `UNCHECKED_TOOLS` if the config controls none of its arguments. The `config` fixture
-in `tests/policy/conftest.py` chdirs into a temp dir and returns a function that
+in `tests/config/conftest.py` chdirs into a temp dir and returns a function that
 writes the config there.
 
 `pytest` runs with `--import-mode=importlib` (set in `pyproject.toml`).

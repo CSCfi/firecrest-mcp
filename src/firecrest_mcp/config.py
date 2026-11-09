@@ -6,9 +6,7 @@ from pathlib import Path, PurePosixPath
 from typing import Annotated, Self
 from urllib.parse import urlsplit
 
-import cachetools.func
 from fastmcp.exceptions import ToolError
-from firecrest.v2 import Firecrest
 from pydantic import (
     AfterValidator,
     BaseModel,
@@ -87,7 +85,7 @@ def _normalized_path(path: str, aliases: dict[str, str]) -> PurePosixPath:
     return normalized
 
 
-class ClusterPolicy(BaseModel):
+class ClusterConfig(BaseModel):
     """What the tools may do on one cluster, from its table. It applies to all of the
     cluster's systems (e.g. Roihu's cpu and gpu), which share Slurm and file
     systems. A missing key allows nothing."""
@@ -153,7 +151,7 @@ class ClusterPolicy(BaseModel):
         partition: str | None,
         reservation: str | None,
     ) -> tuple[str, str]:
-        """Check a job's arguments against the policy, and return the account and
+        """Check a job's arguments against the config, and return the account and
         partition to submit it with: the given ones, or default_account and
         default_partition. They are always passed, so they override the script's
         #SBATCH lines, which are not checked.
@@ -192,15 +190,15 @@ def _read_config() -> dict:
     return data
 
 
-def load_cluster_policy() -> ClusterPolicy:
-    """Return the policy for this server's cluster. Other clusters' tables are not
+def load_cluster_config() -> ClusterConfig:
+    """Return the config for this server's cluster. Other clusters' tables are not
     read."""
     data = _read_config()
     name = cluster_name()
     if name not in data:
         raise _config_error(f"there is no [{name}] table, so nothing is allowed.")
     try:
-        return ClusterPolicy.model_validate(data[name])
+        return ClusterConfig.model_validate(data[name])
     except ValidationError as e:
         raise _config_error(
             "; ".join(
@@ -210,15 +208,20 @@ def load_cluster_policy() -> ClusterPolicy:
         ) from None
 
 
+def _local_path_entries() -> list[str]:
+    """Return the top-level local_paths as written in the config file."""
+    entries = _read_config().get("local_paths", [])
+    if not isinstance(entries, list) or not all(isinstance(e, str) for e in entries):
+        raise _config_error("local_paths must be a list of strings.")
+    return entries
+
+
 def check_local_paths(*paths: str | os.PathLike | None) -> None:
     """Raise a ToolError unless every given local path is one of the top-level
     local_paths or lies below one. Relative entries and paths are relative to the
     working directory, and both are resolved, following symlinks, before they are
     compared. ``None`` values are skipped."""
-    entries = _read_config().get("local_paths", [])
-    if not isinstance(entries, list) or not all(isinstance(e, str) for e in entries):
-        raise _config_error("local_paths must be a list of strings.")
-    allowed = [Path(entry).expanduser().resolve() for entry in entries]
+    allowed = [Path(entry).expanduser().resolve() for entry in _local_path_entries()]
     protected = [p.resolve() for p in PROTECTED_LOCAL_PATHS]
     protected.append(token_path().resolve())
     for path in paths:
@@ -231,20 +234,11 @@ def check_local_paths(*paths: str | os.PathLike | None) -> None:
             raise _not_allowed("Local path", str(path), "local_paths")
 
 
-@cachetools.func.ttl_cache(maxsize=2, ttl=60 * 3)
-def _user_name(client: Firecrest, system_name: str) -> str:
-    """Return the user's name on a system. It changes only if the token file is
-    replaced with another user's token, so it is cached for a few minutes."""
-    return client.userinfo(system_name)["user"]["name"]
-
-
-def own_jobs(
-    client: Firecrest, system_name: str, jobs: list, jobid: str | None = None
-) -> list:
-    """Return the jobs that belong to the user. FirecREST returns other users' jobs
-    when they are asked for by ID, so asking for another user's job is an error."""
-    user = _user_name(client, system_name)
-    own = [job for job in jobs if job.get("user") == user]
-    if jobid is not None and not own:
-        raise ToolError(f"Job {jobid} is not one of your jobs.")
-    return own
+def active_config() -> dict:
+    """Returns the settings from .firecrest-mcp.toml that apply to this server:
+    local_paths and this cluster's table, with every key and [] or null for a missing
+    key, which allows nothing. The file is read on every call."""
+    return {
+        "local_paths": _local_path_entries(),
+        cluster_name(): load_cluster_config().model_dump(),
+    }
