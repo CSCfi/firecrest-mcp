@@ -102,6 +102,10 @@ Status tools, and job tools other than the `submit` tool, work without a config,
 they only read the cluster's status or act on your own jobs, with no paths or accounts
 to check.
 
+The `config` tool shows the agent the parts of the config that its server applies:
+`local_paths` and the cluster's table, with every key. It fails, like the other tools,
+when the config is missing or invalid.
+
 The file tools for copying, moving, deleting, compressing, extracting, uploading and
 downloading need an account, because they may run a transfer job, a Slurm job that
 FirecREST starts for large or slow file operations. The account is required even if no
@@ -136,7 +140,7 @@ server won't start without it. To adapt the server to another cluster:
   instructions for the agent, such as its partitions and file systems (see `lumi.md`),
   and reinstall. A file with any other name is ignored without a warning.
 - If a directory has two names, as `/project` and `/projappl` do on LUMI, add it to
-  `PATH_ALIASES` in `src/firecrest_mcp/policy.py`.
+  `PATH_ALIASES` in `src/firecrest_mcp/config.py`.
 
 ## Development
 

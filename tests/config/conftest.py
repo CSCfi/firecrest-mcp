@@ -1,4 +1,4 @@
-"""Fixtures that run the policy tests with a config file in a temporary directory."""
+"""Fixtures that run the config tests with a config file in a temporary directory."""
 
 import pytest
 

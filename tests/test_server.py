@@ -12,8 +12,9 @@ from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
 
 
 def test_registered_tools(monkeypatch):
-    """The server registers every tool of the three mixins and nothing else. The
-    list of tools itself is tested in tests/policy/test_tools.py."""
+    """The server registers every tool of the three mixins, the config tool and
+    nothing else. The list of the mixins' tools is tested in
+    tests/config/test_tools.py."""
     mixins = [
         FirecrestComputeToolsMixin,
         FirecrestFilesystemToolsMixin,
@@ -29,7 +30,7 @@ def test_registered_tools(monkeypatch):
     monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
     server = importlib.import_module("firecrest_mcp.server")
     tools = asyncio.run(server.mcp.list_tools())
-    assert {tool.name for tool in tools} == expected
+    assert {tool.name for tool in tools} == expected | {"config"}
 
 
 @pytest.fixture

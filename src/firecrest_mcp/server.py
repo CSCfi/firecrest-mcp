@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from firecrest.v2 import Firecrest
 
 from firecrest_mcp.auth import TokenAuth
-from firecrest_mcp.policy import cluster_name
+from firecrest_mcp.config import active_config, cluster_name
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
@@ -44,3 +44,6 @@ for name in dir(fc):
     attr = getattr(fc, name)
     if callable(attr) and not name.startswith("__"):
         mcp.add_tool(attr)
+
+# Tools that don't use the FirecREST client are registered here.
+mcp.tool(active_config, name="config")

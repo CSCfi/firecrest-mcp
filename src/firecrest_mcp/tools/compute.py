@@ -7,8 +7,27 @@ from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
 from firecrest.v2 import Firecrest
 
-from firecrest_mcp.policy import check_local_paths, load_cluster_policy, own_jobs
+from firecrest_mcp.config import check_local_paths, load_cluster_config
 from firecrest_mcp.tools.params import SystemName
+
+
+@cachetools.func.ttl_cache(maxsize=2, ttl=60 * 3)
+def _user_name(client: Firecrest, system_name: str) -> str:
+    """Return the user's name on a system. It changes only if the token file is
+    replaced with another user's token, so it is cached for a few minutes."""
+    return client.userinfo(system_name)["user"]["name"]
+
+
+def own_jobs(
+    client: Firecrest, system_name: str, jobs: list, jobid: str | None = None
+) -> list:
+    """Return the jobs that belong to the user. FirecREST returns other users' jobs
+    when they are asked for by ID, so asking for another user's job is an error."""
+    user = _user_name(client, system_name)
+    own = [job for job in jobs if job.get("user") == user]
+    if jobid is not None and not own:
+        raise ToolError(f"Job {jobid} is not one of your jobs.")
+    return own
 
 
 class FirecrestComputeToolsMixin:
@@ -41,7 +60,7 @@ class FirecrestComputeToolsMixin:
                 "Exactly one of script_str, script_local_path or script_remote_path"
                 " must be given."
             )
-        cluster = load_cluster_policy()
+        cluster = load_cluster_config()
         cluster.check_remote_paths(working_dir, script_remote_path)
         check_local_paths(script_local_path)
         account, partition = cluster.checked_job_options(
