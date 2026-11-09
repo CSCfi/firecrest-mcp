@@ -1,4 +1,4 @@
-"""Tests of the remote path checks."""
+"""Tests for the remote path checks."""
 
 import pytest
 from fastmcp.exceptions import ToolError

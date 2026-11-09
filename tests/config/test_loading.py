@@ -1,5 +1,5 @@
-"""Tests of reading the config file, of its account, group and local path checks,
-and of the config tool."""
+"""Tests for reading the config file, its account, group and local path checks,
+and the config tool."""
 
 from pathlib import Path
 

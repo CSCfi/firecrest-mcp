@@ -1,4 +1,4 @@
-"""Tests of reading and checking the FirecREST token file."""
+"""Tests for reading and checking the FirecREST token file."""
 
 import time
 

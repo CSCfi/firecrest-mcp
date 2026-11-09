@@ -1,4 +1,4 @@
-"""Tests of the tools that the server registers and of the options of main()."""
+"""Tests for the tools that the server registers and the options of main()."""
 
 import asyncio
 import importlib

@@ -1,4 +1,4 @@
-"""Tests of the tools with a mock client: that every tool checks its arguments, and
+"""Tests for the tools with a mock client: that every tool checks its arguments, and
 the behaviour of submit, read_file and chgrp.
 """
 
