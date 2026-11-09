@@ -81,8 +81,6 @@ each server's entry in your MCP configuration. In Claude Code:
 }
 ```
 
-OpenCode calls the same setting `environment`.
-
 ### HTTP
 
 If the agent runs in a container, start the server outside the container from the
@@ -116,6 +114,8 @@ transfer job runs. The agent can name the account when it calls the tool, or you
 The `groups` key lists the groups that the `chgrp` tool may set on a file. This lets the
 agent share a file you moved into a project directory with the project's members.
 
+### Risks
+
 **Don't list your home directory or other places with credentials, such as `~/.ssh`, in
 `local_paths`.** The server protects only the token file and files that could widen the
 agent's access or run commands (the config file and `.mcp.json`, `.claude/` and `.git/`
@@ -124,6 +124,36 @@ send anything else in `local_paths` to the cluster.
 
 **The `submit` tool doesn't check the job script.** Its commands run with all of your
 permissions, including outside `remote_paths`.
+
+### Agent permissions
+
+The agent could widen its own access by editing `.firecrest-mcp.toml`, or read your
+token, with its own tools. The server's instructions tell it not to, which stops an
+agent that follows them, but not one that ignores them, for example after a prompt
+injection. If your agent has permission settings, use them to deny it writes to the
+config and reads of the token file. In Claude Code, for example, add these keys to
+`~/.claude/settings.json`, merged with what is already there, and start a new session:
+
+```json
+{
+  "permissions": {
+    "deny": ["Edit(.firecrest-mcp.toml)", "Read(~/.firecrest-token)"]
+  },
+  "sandbox": {
+    "filesystem": {
+      "denyWrite": ["//**/.firecrest-mcp.toml"],
+      "denyRead": ["~/.firecrest-token"]
+    }
+  }
+}
+```
+
+The `Edit` rule stops the Edit and Write tools from changing the config in any project,
+and the `Read` rule stops the Read tool from reading the token. The sandbox entries stop
+Bash commands from doing either, but only where the
+[sandbox](https://code.claude.com/docs/en/sandboxing) is turned on. If you set
+`FIRECREST_TOKEN_PATH`, use that path instead. This makes it harder for the agent, not
+impossible.
 
 ## Other clusters
 
@@ -139,7 +169,9 @@ server won't start without it. To adapt the server to another cluster:
   `[hpc]`.
 - Optionally, add `src/firecrest_mcp/context/<cluster name>.md` (e.g. `hpc.md`) with
   instructions for the agent, such as its partitions and file systems (see `lumi.md`),
-  and reinstall. A file with any other name is ignored without a warning.
+  and reinstall. A file with any other name is ignored without a warning. Start the
+  file with a `###` header naming the cluster. The server sends it after its ground
+  rules for all clusters, in `src/firecrest_mcp/ground_rules.md`.
 - If a directory has two names, as `/project` and `/projappl` do on LUMI, add it to
   `PATH_ALIASES` in `src/firecrest_mcp/config.py`.
 

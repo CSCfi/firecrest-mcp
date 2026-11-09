@@ -120,7 +120,9 @@ account before giving it a token:
   with `attach_to_job`. `submit` doesn't read the job script, so the script can read
   and write files outside `remote_paths`.
 - **Editing `.firecrest-mcp.toml` with its own file tools**, which would undo every
-  safeguard above. Only the agent's own permission settings can prevent this.
+  safeguard above. The server's instructions tell the agent not to, but only the
+  agent's own permission settings can stop it. The
+  [README](../README.md#agent-permissions) has an example for Claude Code.
 - Sending any file in `local_paths` to the cluster. Only `.firecrest-mcp.toml`,
   `.mcp.json`, `.claude/`, `.git/` and the token file are protected.
 - Following a symlink on the cluster from inside `remote_paths` to outside it.
