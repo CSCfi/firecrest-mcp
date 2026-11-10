@@ -9,7 +9,9 @@ it doesn't restrict.
 
 The server is built for CSC's LUMI and Roihu, which get cluster-specific instructions
 for the agent. Other clusters with a FirecREST v2 API should work without them, and can
-be given their own (see [Other clusters](#other-clusters)).
+be given their own (see [Other clusters](#other-clusters)). For LUMI and Roihu, also add
+the documentation servers run by CSC and the LUMI AI Factory (see
+[Documentation servers](#documentation-servers)).
 
 ## Installation
 
@@ -87,6 +89,26 @@ If the agent runs in a container, start the server outside the container from th
 project directory, and let the agent connect to it over HTTP. The token then stays
 outside the container. [Connecting over HTTP](docs/http.md) gives the commands for the
 server, Podman and the agent.
+
+## Documentation servers
+
+This server's instructions cover only the basics of each cluster, so for modules,
+software or quotas the agent relies on its training, which may be out of date. CSC and
+the LUMI AI Factory run public MCP servers that let the agent search their current
+documentation. They need no token. Add them to your agent's global MCP configuration
+next to this server.
+
+| Server | Searches | Endpoint |
+|---|---|---|
+| [CSC Documentation MCP server](https://docs.csc.fi/computing/ai-tools/docs-mcp/) | CSC's user guide, which covers Roihu | `https://mcp.docs.csc.fi` |
+| [LUMI AI Factory MCP server](https://docs.lumi-supercomputer.eu/laif/software/agent-infrastructure/#mcp-server) | LUMI's documentation and AI guide. It also reports LUMI's service status. | `https://lumi-aif-agents.2.rahtiapp.fi/mcp` |
+
+In Claude Code:
+
+```bash
+claude mcp add --scope user --transport http csc-docs https://mcp.docs.csc.fi
+claude mcp add --scope user --transport http lumi-aif https://lumi-aif-agents.2.rahtiapp.fi/mcp
+```
 
 ## Config file
 
@@ -168,10 +190,11 @@ server won't start without it. To adapt the server to another cluster:
   For example, `https://api.hpc.example.org/v1` is the cluster `hpc`, with the table
   `[hpc]`.
 - Optionally, add `src/firecrest_mcp/context/<cluster name>.md` (e.g. `hpc.md`) with
-  instructions for the agent, such as its partitions and file systems (see `lumi.md`),
-  and reinstall. A file with any other name is ignored without a warning. Start the
-  file with a `###` header naming the cluster. The server sends it after its ground
-  rules for all clusters, in `src/firecrest_mcp/ground_rules.md`.
+  instructions for the agent, such as where its documentation is and what the agent
+  should know before it looks there (see `lumi.md`), and reinstall. A file with any
+  other name is ignored without a warning. Start the file with a `###` header naming
+  the cluster. The server sends it after its ground rules for all clusters, in
+  `src/firecrest_mcp/ground_rules.md`.
 - If a directory has two names, as `/project` and `/projappl` do on LUMI, add it to
   `PATH_ALIASES` in `src/firecrest_mcp/config.py`.
 
