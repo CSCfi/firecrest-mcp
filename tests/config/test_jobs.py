@@ -1,10 +1,7 @@
 """Tests that the job tools only reach the user's own jobs."""
 
-from unittest.mock import create_autospec
-
 import pytest
 from fastmcp.exceptions import ToolError
-from firecrest.v2 import Firecrest
 
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 
@@ -14,8 +11,8 @@ THEIRS = {"jobId": 2, "user": "someone"}
 
 # The tools with a mock FirecREST client whose user is "me".
 class Tools(FirecrestComputeToolsMixin):
-    def __init__(self, jobs):
-        self.client = create_autospec(Firecrest, instance=True)
+    def __init__(self, client, jobs):
+        self.client = client
         self.client.userinfo.return_value = {"user": {"name": "me"}}
         self.client.job_info.return_value = jobs
 
@@ -25,17 +22,17 @@ def call(tools, name, *args):
     return getattr(tools, name)("lumi", *args)
 
 
-def test_job_list_has_only_own_jobs():
+def test_job_list_has_only_own_jobs(mock_client):
     """Listing jobs never asks for, or returns, other users' jobs."""
-    tools = Tools([MINE, THEIRS])
+    tools = Tools(mock_client, [MINE, THEIRS])
     assert call(tools, "job_info") == [MINE]
     assert tools.client.job_info.call_args.kwargs["allusers"] is False
 
 
-def test_own_job_by_id():
+def test_own_job_by_id(mock_client):
     """The user's own job is returned when asked for by ID, and the user's name is
     fetched only once."""
-    tools = Tools([MINE])
+    tools = Tools(mock_client, [MINE])
     assert call(tools, "job_info", "1") == [MINE]
     call(tools, "job_metadata", "1")
     tools.client.job_metadata.assert_called_once()
@@ -55,11 +52,11 @@ def test_own_job_by_id():
         ("cancel_job", []),
     ],
 )
-def test_other_users_job_by_id_denied(tool, args):
+def test_other_users_job_by_id_denied(tool, args, mock_client):
     """Another user's job is refused when asked for by ID, including a job FirecREST
     reports without an owner."""
     for jobs in [[THEIRS], [{"jobId": 2}]]:
-        tools = Tools(jobs)
+        tools = Tools(mock_client, jobs)
         with pytest.raises(ToolError, match="Job 2 is not one of your jobs"):
             call(tools, tool, "2", *args)
         tools.client.job_metadata.assert_not_called()

@@ -1,12 +1,14 @@
-"""Tests for the tools with a mock client: that every tool checks its arguments, and
-the behaviour of submit, read_file and chgrp.
+"""Tests for the tools with a mock client: that every tool checks its arguments, that
+every tool works when it is called through FastMCP, and the behaviour of submit,
+read_file and chgrp.
 """
 
-from unittest.mock import create_autospec
+import asyncio
 
 import pytest
+from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
-from firecrest.v2 import Firecrest
+from firecrest.v2 import ExternalDownload
 
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
@@ -17,6 +19,33 @@ ALLOWED_REMOTE_PATH = "/scratch/project_1/x"
 DENIED_REMOTE_PATH = "/etc/x"
 ALLOWED_LOCAL_PATH = "data/x"
 DENIED_LOCAL_PATH = "x"
+
+# What the mock client's userinfo returns.
+MOCK_USERINFO = {"user": {"name": "me"}}
+# A job of that user. The job tools refuse a job of anyone else.
+MOCK_OWN_JOB = {"jobId": "1", "user": "me"}
+
+# What the mock client returns for each tool. A tool that is not listed returns an
+# empty dict. None means that the client returns nothing.
+MOCK_CLIENT_RESULTS = {
+    "userinfo": MOCK_USERINFO,
+    "systems": [{"name": "lumi"}],
+    "partitions": [{"name": "small"}],
+    "reservations": [{"name": "training"}],
+    "list_files": [{"name": "x"}],
+    "read_file": "text",
+    "compress": None,
+    "extract": None,
+    "rm": None,
+    "upload": None,
+    "download": ExternalDownload(
+        client=None,
+        transfer_info={"transferJob": {"jobId": "2"}},
+        file_path=ALLOWED_LOCAL_PATH,
+    ),
+    "job_info": [MOCK_OWN_JOB],
+    "job_metadata": [{"jobId": "1", "script": "x"}],
+}
 
 # Each tool with its remote path arguments, local path arguments and its other
 # arguments (besides system_name). Every path argument must be checked.
@@ -40,18 +69,21 @@ TOOLS_RESTRICTED = [
     ("submit", ["working_dir"], ["script_local_path"], {}),
 ]
 
-# Tools with no argument that the config restricts. test_every_tool_is_listed fails
-# for a tool in neither list.
-TOOLS_NOT_RESTRICTED = {
-    "systems",
-    "partitions",
-    "reservations",
-    "userinfo",
-    "job_info",
-    "job_metadata",
-    "cancel_job",
-    "attach_to_job",
-}
+# Tools with no argument that the config restricts, with the same fields as
+# TOOLS_RESTRICTED. test_every_tool_is_listed fails for a tool in neither list.
+TOOLS_NOT_RESTRICTED = [
+    ("systems", [], [], {}),
+    ("partitions", [], [], {}),
+    ("reservations", [], [], {}),
+    ("userinfo", [], [], {}),
+    ("job_info", [], [], {}),
+    ("job_metadata", [], [], {"jobid": MOCK_OWN_JOB["jobId"]}),
+    ("cancel_job", [], [], {"jobid": MOCK_OWN_JOB["jobId"]}),
+    ("attach_to_job", [], [], {"jobid": MOCK_OWN_JOB["jobId"], "command": "hostname"}),
+]
+
+# Every tool. submit is listed twice, once for each kind of script path.
+ALL_TOOLS = TOOLS_RESTRICTED + TOOLS_NOT_RESTRICTED
 
 # Tools with an account argument, which defaults to default_account. job_info also
 # has an account argument, but it only filters the jobs that job_info lists.
@@ -72,22 +104,27 @@ def restricted_tool(name):
 
 
 # The tools with a mock FirecREST client, so no real system is contacted. The mock
-# has the client's signatures, so a call with a wrong argument name fails.
+# has the client's signatures, so a call with a wrong argument name fails. Its
+# methods return the values in MOCK_CLIENT_RESULTS.
 class Tools(
     FirecrestComputeToolsMixin,
     FirecrestFilesystemToolsMixin,
     FirecrestStatusToolsMixin,
 ):
-    def __init__(self):
-        self.client = create_autospec(Firecrest, instance=True)
+    def __init__(self, client):
+        self.client = client
+        for entry in ALL_TOOLS:
+            name = entry[0]
+            # A tool that is not in MOCK_CLIENT_RESULTS returns an empty dict.
+            client_method(self, name).return_value = MOCK_CLIENT_RESULTS.get(name, {})
 
 
 @pytest.fixture
-def tools(config, tmp_path):
+def tools(config, tmp_path, mock_client):
     """Tools with the default config and an allowed local directory."""
     config()
     (tmp_path / "data").mkdir()
-    return Tools()
+    return Tools(mock_client)
 
 
 def arguments_with_default_paths(remote_args, local_args, other_args):
@@ -105,6 +142,22 @@ def call(tools, name, remote_args, local_args, other_args, **overrides):
     arguments = arguments_with_default_paths(remote_args, local_args, other_args)
     arguments.update(overrides)
     return getattr(tools, name)("lumi", **arguments)
+
+
+def call_through_mcp(tools, name, arguments):
+    """Call a tool the way an agent does: an MCP client sends the arguments to a
+    FastMCP server. FastMCP checks them against the tool's parameter types and turns
+    the tool's result into a response, which a direct call skips. If either step or
+    the tool fails, this raises a ToolError."""
+    server = FastMCP("test")
+    server.add_tool(getattr(tools, name))
+
+    # The client is async, so the call is put in a coroutine that asyncio runs.
+    async def run():
+        async with Client(server) as client:
+            return await client.call_tool(name, arguments)
+
+    return asyncio.run(run())
 
 
 def client_method(tools, name):
@@ -136,7 +189,7 @@ def test_every_tool_is_listed():
         for name in dir(Tools)
         if callable(getattr(Tools, name)) and not name.startswith("__")
     }
-    assert tools == {c[0] for c in TOOLS_RESTRICTED} | TOOLS_NOT_RESTRICTED, (
+    assert tools == {tool[0] for tool in ALL_TOOLS}, (
         "Add a new tool to TOOLS_RESTRICTED, or to TOOLS_NOT_RESTRICTED if the config"
         " controls none of its arguments. Remove a deleted tool from them."
     )
@@ -153,6 +206,19 @@ def test_tool_with_allowed_arguments_calls_client(
     """Each tool calls the client when its arguments are allowed."""
     call(tools, name, remote_args, local_args, other_args)
     client_method(tools, name).assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("name", "remote_args", "local_args", "other_args"), ALL_TOOLS, ids=ids(ALL_TOOLS)
+)
+def test_tool_works_through_fastmcp(tools, name, remote_args, local_args, other_args):
+    """Each tool can be called through FastMCP with its default arguments without an
+    error."""
+    arguments = arguments_with_default_paths(remote_args, local_args, other_args)
+    # systems is the only tool without a system_name.
+    if name != "systems":
+        arguments["system_name"] = "lumi"
+    call_through_mcp(tools, name, arguments)
 
 
 def denied_case(tool, argument, value):
@@ -288,10 +354,10 @@ def test_submit_needs_exactly_one_script(tools):
     tools.client.submit.assert_not_called()
 
 
-def test_submit_without_default_partition(config):
+def test_submit_without_default_partition(config, mock_client):
     """Without default_partition, a partition must be given as an argument."""
     config('[lumi]\naccounts = ["p"]\ndefault_account = "p"\npartitions = ["small"]\n')
-    tools = Tools()
+    tools = Tools(mock_client)
     with pytest.raises(ToolError, match="No partition given"):
         tools.submit("lumi", None, script_str="#SBATCH -p small")
     tools.submit("lumi", None, script_str="#!/bin/bash", partition="small")

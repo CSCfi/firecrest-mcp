@@ -19,3 +19,9 @@ repos:
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+      # The tests also read Markdown and TOML files, so this runs on any change.
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        pass_filenames: false

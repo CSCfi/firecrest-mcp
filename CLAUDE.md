@@ -18,8 +18,9 @@ uv run pre-commit run --all-files              # all pre-commit hooks
 ```
 
 The pre-commit hooks (`.pre-commit-config.yaml`) are local hooks that call `uv run`, so
-ruff and ty versions come from `uv.lock`. They check only; `ruff format` must be run
-by hand when the format hook fails.
+ruff, ty and pytest versions come from `uv.lock`. They run ruff, ty and the whole test
+suite. They only check, so `ruff format` must be run by hand when the format hook
+fails.
 
 Running the server needs `FIRECREST_URL` (e.g. `https://api.lumi.csc.fi/v1`) and a
 token file at `~/.firecrest-token` (or `FIRECREST_TOKEN_PATH`) with mode 600.
@@ -55,6 +56,11 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
   `tests/test_server.py` checks that the server registers exactly the mixins' tools
   and `config`. The only list of the mixins' tool names is `TOOLS_RESTRICTED` and
   `TOOLS_NOT_RESTRICTED` in `tests/config/test_tools.py`.
+- **Tests through FastMCP**: most tool tests call the mixin methods directly, which
+  skips FastMCP's validation of the arguments and its conversion of the result.
+  `test_tool_works_through_fastmcp` in `tests/config/test_tools.py` calls every tool
+  once with `call_through_mcp`. `MOCK_CLIENT_RESULTS` there holds what the mock
+  client returns for a tool. A tool that isn't listed returns an empty dict.
 - **Client calls**: pass everything after `system_name` to `self.client` methods by
   keyword. pyfirecrest's untyped `_with_correlation_id` decorator hides their
   signatures from ty, so only the names catch a wrong argument. The tests' mock
@@ -100,7 +106,8 @@ before calling the client:
 When changing a tool's checked parameters, update `TOOLS_RESTRICTED` (and
 `TOOLS_WITH_ACCOUNT`) in `tests/config/test_tools.py`. A new tool goes into
 `TOOLS_RESTRICTED`, or into `TOOLS_NOT_RESTRICTED` if the config controls none of its
-arguments. The `config` fixture in `tests/config/conftest.py` chdirs into a temp dir
+arguments, and into `MOCK_CLIENT_RESULTS` if the client returns something other than
+a dict for it. The `config` fixture in `tests/config/conftest.py` chdirs into a temp dir
 and returns a function that writes the config there.
 
 `pytest` runs with `--import-mode=importlib` (set in `pyproject.toml`).
