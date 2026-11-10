@@ -213,8 +213,8 @@ git also ignores. Their servers are named `firecrest-lumi-dev` and
   [Connecting over HTTP](docs/http.md) describes, and restart them after switching
   branches or editing the code.
 
-Install the pre-commit hooks, which run `ruff check`, `ruff format --check` and
-`ty check` before each commit:
+Install the pre-commit hooks, which run `ruff check`, `ruff format --check`,
+`ty check` and `pytest` before each commit:
 
 ```bash
 uv run pre-commit install

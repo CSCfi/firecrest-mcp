@@ -116,7 +116,7 @@ class FirecrestComputeToolsMixin:
         self,
         system_name: SystemName,
         jobid: Annotated[str, "the ID of the job"],
-    ) -> dict:
+    ) -> list[dict]:
         """Get the metadata of one of your jobs."""
         own_jobs(
             self.client,
