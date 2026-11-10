@@ -53,8 +53,8 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
   The `config` tool doesn't call FirecREST, so it isn't on a mixin. `server.py`
   registers `active_config()` from `config.py` under that name.
   `tests/test_server.py` checks that the server registers exactly the mixins' tools
-  and `config`. The only list of the mixins' tool names is `TOOL_CALLS` and
-  `UNCHECKED_TOOLS` in `tests/config/test_tools.py`.
+  and `config`. The only list of the mixins' tool names is `TOOLS_RESTRICTED` and
+  `TOOLS_NOT_RESTRICTED` in `tests/config/test_tools.py`.
 - **Client calls**: pass everything after `system_name` to `self.client` methods by
   keyword. pyfirecrest's untyped `_with_correlation_id` decorator hides their
   signatures from ty, so only the names catch a wrong argument. The tests' mock
@@ -97,10 +97,10 @@ before calling the client:
   script, and returns an account and partition that always override the script's
   `#SBATCH` lines.
 
-When changing a tool's checked parameters, update `TOOL_CALLS` (and `ACCOUNT_TOOLS`)
-in `tests/config/test_tools.py`. A new tool goes into `TOOL_CALLS`, or into
-`UNCHECKED_TOOLS` if the config controls none of its arguments. The `config` fixture
-in `tests/config/conftest.py` chdirs into a temp dir and returns a function that
-writes the config there.
+When changing a tool's checked parameters, update `TOOLS_RESTRICTED` (and
+`TOOLS_WITH_ACCOUNT`) in `tests/config/test_tools.py`. A new tool goes into
+`TOOLS_RESTRICTED`, or into `TOOLS_NOT_RESTRICTED` if the config controls none of its
+arguments. The `config` fixture in `tests/config/conftest.py` chdirs into a temp dir
+and returns a function that writes the config there.
 
 `pytest` runs with `--import-mode=importlib` (set in `pyproject.toml`).

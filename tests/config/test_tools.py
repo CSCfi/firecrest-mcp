@@ -2,7 +2,6 @@
 the behaviour of submit, read_file and chgrp.
 """
 
-import inspect
 from unittest.mock import create_autospec
 
 import pytest
@@ -14,14 +13,14 @@ from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
 
 # Allowed and denied by the default CONFIG in conftest.py.
-ALLOWED = "/scratch/project_1/x"
-DENIED = "/etc/x"
-ALLOWED_LOCAL = "data/x"
-DENIED_LOCAL = "x"
+ALLOWED_REMOTE_PATH = "/scratch/project_1/x"
+DENIED_REMOTE_PATH = "/etc/x"
+ALLOWED_LOCAL_PATH = "data/x"
+DENIED_LOCAL_PATH = "x"
 
 # Each tool with its remote path arguments, local path arguments and its other
 # arguments (besides system_name). Every path argument must be checked.
-TOOL_CALLS = [
+TOOLS_RESTRICTED = [
     ("list_files", ["path"], [], {}),
     ("read_file", ["path"], [], {}),
     ("checksum", ["path"], [], {}),
@@ -41,9 +40,9 @@ TOOL_CALLS = [
     ("submit", ["working_dir"], ["script_local_path"], {}),
 ]
 
-# Tools without arguments that the config controls. Every other tool must be in
-# TOOL_CALLS, so that its arguments are tested.
-UNCHECKED_TOOLS = {
+# Tools with no argument that the config restricts. test_every_tool_is_listed fails
+# for a tool in neither list.
+TOOLS_NOT_RESTRICTED = {
     "systems",
     "partitions",
     "reservations",
@@ -54,22 +53,31 @@ UNCHECKED_TOOLS = {
     "attach_to_job",
 }
 
-# Tools with an account argument, which defaults to default_account.
-ACCOUNT_TOOLS = [
-    (name, remote, local, other)
-    for name, remote, local, other in TOOL_CALLS
-    if name in {"mv", "compress", "extract", "cp", "rm", "upload", "download"}
+# Tools with an account argument, which defaults to default_account. job_info also
+# has an account argument, but it only filters the jobs that job_info lists.
+TOOLS_WITH_ACCOUNT = [
+    tool
+    for tool in TOOLS_RESTRICTED
+    if tool[0]
+    in {"mv", "compress", "extract", "cp", "rm", "upload", "download", "submit"}
 ]
 
 
-def tool_call(name, *args):
-    """Return the entry of TOOL_CALLS for a tool, with the given arguments."""
-    return next(c for c in TOOL_CALLS if c[0] == name and set(args) <= {*c[1], *c[2]})
+def restricted_tool(name):
+    """Return the first entry of TOOLS_RESTRICTED for a tool."""
+    for tool in TOOLS_RESTRICTED:
+        if tool[0] == name:
+            return tool
+    raise ValueError(f"{name} is not in TOOLS_RESTRICTED")
 
 
 # The tools with a mock FirecREST client, so no real system is contacted. The mock
 # has the client's signatures, so a call with a wrong argument name fails.
-class Tools(FirecrestFilesystemToolsMixin, FirecrestComputeToolsMixin):
+class Tools(
+    FirecrestComputeToolsMixin,
+    FirecrestFilesystemToolsMixin,
+    FirecrestStatusToolsMixin,
+):
     def __init__(self):
         self.client = create_autospec(Firecrest, instance=True)
 
@@ -82,62 +90,62 @@ def tools(config, tmp_path):
     return Tools()
 
 
+def arguments_with_default_paths(remote_args, local_args, other_args):
+    """Return a tool's arguments with the default value for each path argument."""
+    # A tool can have several path arguments, such as source_path and target_path
+    # of mv. They all get the same path.
+    remote_allowed = {argument: ALLOWED_REMOTE_PATH for argument in remote_args}
+    local_allowed = {argument: ALLOWED_LOCAL_PATH for argument in local_args}
+    return remote_allowed | local_allowed | other_args
+
+
 def call(tools, name, remote_args, local_args, other_args, **overrides):
-    kwargs = (
-        dict.fromkeys(remote_args, ALLOWED)
-        | dict.fromkeys(local_args, ALLOWED_LOCAL)
-        | other_args
-        | overrides
-    )
-    return getattr(tools, name)("lumi", **kwargs)
+    """Call a tool's method directly, with the arguments in overrides replacing the
+    default ones."""
+    arguments = arguments_with_default_paths(remote_args, local_args, other_args)
+    arguments.update(overrides)
+    return getattr(tools, name)("lumi", **arguments)
 
 
 def client_method(tools, name):
-    """Return the client method a tool calls, which differs for some tools."""
-    return getattr(
-        tools.client, {"read_file": "view", "chgrp": "chown"}.get(name, name)
-    )
+    """Return the method of the mock client that a tool calls."""
+    if name == "read_file":
+        return tools.client.view
+    if name == "chgrp":
+        return tools.client.chown
+    # Every other tool calls the client method of its own name.
+    return getattr(tools.client, name)
 
 
-def client_args(tools, method):
-    """Return the arguments of the last call to a client method by parameter name,
-    with defaults filled in."""
-    call = getattr(tools.client, method).call_args
-    bound = inspect.signature(getattr(Firecrest, method)).bind(
-        None, *call.args, **call.kwargs
-    )
-    bound.apply_defaults()
-    return bound.arguments
+def ids(entries):
+    """Return a test ID for each entry: the tool name and its path arguments, so that
+    the two submit entries get different IDs."""
+    result = []
+    for name, remote_args, local_args, other_args in entries:
+        result.append("-".join([name] + remote_args + local_args))
+    return result
 
 
-def ids(calls):
-    return [f"{c[0]}-{'-'.join(c[1] + c[2])}" for c in calls]
-
-
-def test_every_tool_is_in_tool_calls():
-    """A new tool must be added to TOOL_CALLS or to UNCHECKED_TOOLS. The tools are
-    listed as server.py registers them: every callable non-dunder attribute."""
-
-    class Wrapper(
-        FirecrestComputeToolsMixin,
-        FirecrestFilesystemToolsMixin,
-        FirecrestStatusToolsMixin,
-    ):
-        pass
+def test_every_tool_is_listed():
+    """A new tool must be added to TOOLS_RESTRICTED or to TOOLS_NOT_RESTRICTED. The
+    tools are listed as server.py registers them: every callable non-dunder
+    attribute."""
 
     tools = {
         name
-        for name in dir(Wrapper)
-        if callable(getattr(Wrapper, name)) and not name.startswith("__")
+        for name in dir(Tools)
+        if callable(getattr(Tools, name)) and not name.startswith("__")
     }
-    assert tools == {c[0] for c in TOOL_CALLS} | UNCHECKED_TOOLS, (
-        "Add a new tool to TOOL_CALLS, or to UNCHECKED_TOOLS if the config controls"
-        " none of its arguments. Remove a deleted tool from them."
+    assert tools == {c[0] for c in TOOLS_RESTRICTED} | TOOLS_NOT_RESTRICTED, (
+        "Add a new tool to TOOLS_RESTRICTED, or to TOOLS_NOT_RESTRICTED if the config"
+        " controls none of its arguments. Remove a deleted tool from them."
     )
 
 
 @pytest.mark.parametrize(
-    ("name", "remote_args", "local_args", "other_args"), TOOL_CALLS, ids=ids(TOOL_CALLS)
+    ("name", "remote_args", "local_args", "other_args"),
+    TOOLS_RESTRICTED,
+    ids=ids(TOOLS_RESTRICTED),
 )
 def test_tool_with_allowed_arguments_calls_client(
     tools, name, remote_args, local_args, other_args
@@ -147,25 +155,35 @@ def test_tool_with_allowed_arguments_calls_client(
     client_method(tools, name).assert_called_once()
 
 
+def denied_case(tool, argument, value):
+    """Return a case of the denied-argument test: the tool with one denied argument."""
+    return pytest.param(*tool, {argument: value}, id=f"{tool[0]}-{argument}")
+
+
+def denied_argument_cases():
+    """Return a case for each argument that the config restricts, with a value that
+    the config doesn't allow."""
+    cases = []
+    for tool in TOOLS_RESTRICTED:
+        remote_args = tool[1]
+        local_args = tool[2]
+        for argument in remote_args:
+            cases.append(denied_case(tool, argument, DENIED_REMOTE_PATH))
+        for argument in local_args:
+            cases.append(denied_case(tool, argument, DENIED_LOCAL_PATH))
+    # The config lists no account, partition or reservation called x and no group
+    # called other.
+    for tool in TOOLS_WITH_ACCOUNT:
+        cases.append(denied_case(tool, "account", "x"))
+    cases.append(denied_case(restricted_tool("chgrp"), "group", "other"))
+    cases.append(denied_case(restricted_tool("submit"), "partition", "x"))
+    cases.append(denied_case(restricted_tool("submit"), "reservation", "x"))
+    return cases
+
+
 @pytest.mark.parametrize(
     ("name", "remote_args", "local_args", "other_args", "denied"),
-    [
-        pytest.param(name, remote, local, other, {arg: value}, id=f"{name}-{arg}")
-        for name, remote, local, other in TOOL_CALLS
-        for args, value in [(remote, DENIED), (local, DENIED_LOCAL)]
-        for arg in args
-    ]
-    + [
-        pytest.param(name, remote, local, other, {"account": "x"}, id=f"{name}-account")
-        for name, remote, local, other in ACCOUNT_TOOLS + [tool_call("submit")]
-    ]
-    + [
-        pytest.param(*tool_call("chgrp"), {"group": "other"}, id="chgrp-group"),
-        pytest.param(*tool_call("submit"), {"partition": "x"}, id="submit-partition"),
-        pytest.param(
-            *tool_call("submit"), {"reservation": "x"}, id="submit-reservation"
-        ),
-    ],
+    denied_argument_cases(),
 )
 def test_tool_with_denied_argument_does_not_call_client(
     tools, name, remote_args, local_args, other_args, denied
@@ -178,14 +196,14 @@ def test_tool_with_denied_argument_does_not_call_client(
 
 @pytest.mark.parametrize(
     ("name", "remote_args", "local_args", "other_args"),
-    ACCOUNT_TOOLS,
-    ids=ids(ACCOUNT_TOOLS),
+    TOOLS_WITH_ACCOUNT,
+    ids=ids(TOOLS_WITH_ACCOUNT),
 )
 def test_tool_uses_default_account(tools, name, remote_args, local_args, other_args):
     """A tool called without an account passes the default account as the client's
     account argument."""
     call(tools, name, remote_args, local_args, other_args)
-    assert client_args(tools, name)["account"] == "project_1"
+    assert client_method(tools, name).call_args.kwargs["account"] == "project_1"
 
 
 def test_upload_filename_cannot_escape_directory(tools):
@@ -195,41 +213,53 @@ def test_upload_filename_cannot_escape_directory(tools):
     tools.client.upload.assert_not_called()
 
 
-def submit(tools, script, **kwargs):
-    """Submit a script and return the arguments the client got, by name."""
-    tools.submit("lumi", kwargs.pop("working_dir", None), script_str=script, **kwargs)
-    return client_args(tools, "submit")
+def submit(tools, script, **job_options):
+    """Submit a script and return the keyword arguments the client was called with."""
+    tools.submit("lumi", ALLOWED_REMOTE_PATH, script_str=script, **job_options)
+    return tools.client.submit.call_args.kwargs
 
 
 @pytest.mark.parametrize(
-    ("kwargs", "options"),
+    (
+        "job_options",
+        "expected_account",
+        "expected_partition",
+        "expected_reservation",
+    ),
     [
-        # Without arguments, a job gets the default account and partition.
-        ({}, ("project_1", "small", None)),
+        # Without job options, a job gets the default account and partition.
+        ({}, "project_1", "small", None),
         (
             {"account": "project_2", "partition": "debug", "reservation": "training"},
-            ("project_2", "debug", "training"),
+            "project_2",
+            "debug",
+            "training",
         ),
         # A comma-separated list is allowed if every item in it is listed.
-        ({"partition": "small,debug"}, ("project_1", "small,debug", None)),
+        ({"partition": "small,debug"}, "project_1", "small,debug", None),
     ],
 )
-def test_submit_options(tools, kwargs, options):
+def test_submit_options(
+    tools, job_options, expected_account, expected_partition, expected_reservation
+):
     """The client gets the job's account, partition and reservation."""
-    args = submit(tools, "#!/bin/bash", **kwargs)
-    assert (args["account"], args["partition"], args["reservation"]) == options
+    client_call = submit(tools, "#!/bin/bash", **job_options)
+    assert client_call["account"] == expected_account
+    assert client_call["partition"] == expected_partition
+    assert client_call["reservation"] == expected_reservation
 
 
 def test_submit_overrides_script(tools):
     """The script's #SBATCH lines aren't checked, and the default account and
     partition are passed even when the script sets its own. FirecREST passes them to
     sbatch as --account and --partition, which take precedence over #SBATCH lines."""
-    args = submit(tools, "#SBATCH -A project_3 -p standard\n")
-    assert (args["account"], args["partition"]) == ("project_1", "small")
+    client_call = submit(tools, "#SBATCH -A project_3 -p standard\n")
+    assert client_call["account"] == "project_1"
+    assert client_call["partition"] == "small"
 
 
 @pytest.mark.parametrize(
-    ("kwargs", "error"),
+    ("job_options", "error"),
     [
         ({"account": "project_3"}, "Account 'project_3' is not in"),
         ({"partition": "standard"}, "Partition 'standard' is not in"),
@@ -242,10 +272,10 @@ def test_submit_overrides_script(tools):
         ({"reservation": ""}, "is not in"),
     ],
 )
-def test_submit_denied(tools, kwargs, error):
+def test_submit_denied(tools, job_options, error):
     """Denied arguments stop the job."""
     with pytest.raises(ToolError, match=error):
-        submit(tools, "#!/bin/bash\n", working_dir="/scratch/project_1", **kwargs)
+        submit(tools, "#!/bin/bash\n", **job_options)
     tools.client.submit.assert_not_called()
 
 
@@ -254,7 +284,7 @@ def test_submit_needs_exactly_one_script(tools):
     with pytest.raises(ToolError, match="Exactly one"):
         tools.submit("lumi", None)
     with pytest.raises(ToolError, match="Exactly one"):
-        tools.submit("lumi", None, script_str="x", script_local_path=ALLOWED_LOCAL)
+        tools.submit("lumi", None, script_str="x", script_local_path=ALLOWED_LOCAL_PATH)
     tools.client.submit.assert_not_called()
 
 
@@ -281,36 +311,36 @@ def test_read_file(tools, kwargs, method, expected):
     tools.client.view.return_value = "all"
     tools.client.head.return_value = {"content": "first", "startPosition": 0}
     tools.client.tail.return_value = {"content": "last", "startPosition": 0}
-    assert tools.read_file("lumi", ALLOWED, **kwargs) == expected
+    assert tools.read_file("lumi", ALLOWED_REMOTE_PATH, **kwargs) == expected
     getattr(tools.client, method).assert_called_once()
 
 
 def test_read_file_first_and_last_lines(tools):
     """Asking for both the first and the last lines is an error."""
     with pytest.raises(ToolError, match="at most one"):
-        tools.read_file("lumi", ALLOWED, first_lines=1, last_lines=1)
+        tools.read_file("lumi", ALLOWED_REMOTE_PATH, first_lines=1, last_lines=1)
     assert not tools.client.method_calls
 
 
 def test_chgrp_keeps_owner(tools):
     """chgrp calls chown with an empty owner. That is the default of FirecREST's
     chown request, and FirecREST then changes only the group."""
-    tools.chgrp("lumi", ALLOWED, "project_1")
+    tools.chgrp("lumi", ALLOWED_REMOTE_PATH, "project_1")
     tools.client.chown.assert_called_once_with(
-        "lumi", path=ALLOWED, owner="", group="project_1"
+        "lumi", path=ALLOWED_REMOTE_PATH, owner="", group="project_1"
     )
 
 
 def test_compress_has_no_match_pattern(tools):
     """match_pattern is never passed, as FirecREST puts it into a shell command
     without escaping it."""
-    tools.compress("lumi", ALLOWED, ALLOWED)
-    assert client_args(tools, "compress")["match_pattern"] is None
+    tools.compress("lumi", ALLOWED_REMOTE_PATH, ALLOWED_REMOTE_PATH)
+    assert "match_pattern" not in tools.client.compress.call_args.kwargs
 
 
 @pytest.mark.parametrize("mode", ["u+x", "700'; rm -rf ~; '", "7000a", "75", ""])
 def test_chmod_mode_must_be_numeric(tools, mode):
     """Only an octal mode is passed on, as FirecREST doesn't escape it."""
     with pytest.raises(ToolError, match="is not a numeric mode"):
-        tools.chmod("lumi", ALLOWED, mode)
+        tools.chmod("lumi", ALLOWED_REMOTE_PATH, mode)
     tools.client.chmod.assert_not_called()
