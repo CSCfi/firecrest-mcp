@@ -210,9 +210,13 @@ def load_cluster_config() -> ClusterConfig:
 
 def _local_path_entries() -> list[str]:
     """Return the top-level local_paths as written in the config file."""
+    # Without local_paths, no local path is allowed.
     entries = _read_config().get("local_paths", [])
     if not isinstance(entries, list) or not all(isinstance(e, str) for e in entries):
         raise _config_error("local_paths must be a list of strings.")
+    # Path("") is the working directory, so an empty entry would allow all of it.
+    if "" in entries:
+        raise _config_error("local_paths must not contain an empty string.")
     return entries
 
 

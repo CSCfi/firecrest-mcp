@@ -1,6 +1,6 @@
 """Tests for the tools with a mock client: that every tool checks its arguments, that
 every tool works when it is called through FastMCP, and the behaviour of submit,
-read_file and chgrp.
+read_file, chgrp, upload and download.
 """
 
 import asyncio
@@ -8,7 +8,7 @@ import asyncio
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.exceptions import ToolError
-from firecrest.v2 import ExternalDownload
+from firecrest.v2 import ExternalDownload, ExternalUpload
 
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
@@ -221,6 +221,49 @@ def test_tool_works_through_fastmcp(tools, name, remote_args, local_args, other_
     call_through_mcp(tools, name, arguments)
 
 
+# A system name with which pyfirecrest's userinfo requests the URL of the view
+# endpoint for /etc/passwd.
+TRAVERSAL_SYSTEM_NAME = "../filesystem/lumi/ops/view?path=/etc/passwd&x="
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("userinfo", {}),
+        ("list_files", {"path": ALLOWED_REMOTE_PATH}),
+        ("job_info", {}),
+    ],
+)
+def test_system_name_pattern(tools, name, arguments):
+    """A system name with characters other than letters, digits, '_' and '-' is
+    refused before the client is called."""
+    arguments["system_name"] = TRAVERSAL_SYSTEM_NAME
+    with pytest.raises(ToolError, match="String should match pattern"):
+        call_through_mcp(tools, name, arguments)
+    client_method(tools, name).assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("job_info", {}),
+        ("job_metadata", {}),
+        ("cancel_job", {}),
+        ("attach_to_job", {"command": "hostname"}),
+    ],
+)
+@pytest.mark.parametrize("jobid", ["../1", "1?x=", "1,2"])
+def test_jobid_pattern(tools, name, arguments, jobid):
+    """A job ID with characters other than letters and digits is refused before the
+    client is called."""
+    arguments["system_name"] = "lumi"
+    arguments["jobid"] = jobid
+    with pytest.raises(ToolError, match="String should match pattern"):
+        call_through_mcp(tools, name, arguments)
+    tools.client.job_info.assert_not_called()
+    client_method(tools, name).assert_not_called()
+
+
 def denied_case(tool, argument, value):
     """Return a case of the denied-argument test: the tool with one denied argument."""
     return pytest.param(*tool, {argument: value}, id=f"{tool[0]}-{argument}")
@@ -272,11 +315,84 @@ def test_tool_uses_default_account(tools, name, remote_args, local_args, other_a
     assert client_method(tools, name).call_args.kwargs["account"] == "project_1"
 
 
-def test_upload_filename_cannot_escape_directory(tools):
-    """A filename with '..' cannot move an upload out of its directory."""
-    with pytest.raises(ToolError, match="must not contain '..'"):
-        tools.upload("lumi", "data/x", "/scratch/project_1", "../project_2/f")
+@pytest.mark.parametrize(
+    ("directory", "filename"),
+    [
+        # An absolute filename made posixpath.join drop the directory, so the quote
+        # in it went unchecked into FirecREST's shell command.
+        ("/etc/x'; id; '", "/scratch/project_1/f"),
+        ("/scratch/project_1", "../project_2/f"),
+        ("/scratch/project_1", "sub/f"),
+        ("/scratch/project_1", ""),
+    ],
+)
+def test_upload_filename_is_one_name(tools, directory, filename):
+    """upload refuses a filename that is empty or contains '/'."""
+    with pytest.raises(ToolError, match="must not be empty or contain '/'"):
+        tools.upload("lumi", ALLOWED_LOCAL_PATH, directory, filename)
     tools.client.upload.assert_not_called()
+
+
+# What FirecREST returns when it starts a transfer job: the job, and directives with
+# signed URLs for moving the data.
+TRANSFER_JOB = {"jobId": "2", "system": "lumi"}
+TRANSFER_INFO = {
+    "transferJob": TRANSFER_JOB,
+    "transferDirectives": {"transferMethod": "s3", "downloadUrl": "https://s3/x"},
+}
+
+
+@pytest.mark.parametrize(
+    ("name", "transfer", "arguments"),
+    [
+        (
+            "upload",
+            ExternalUpload(client=None, transfer_info=TRANSFER_INFO, local_file=None),
+            {
+                "system_name": "lumi",
+                "local_file": ALLOWED_LOCAL_PATH,
+                "directory": "/scratch/project_1",
+                "filename": "f",
+            },
+        ),
+        (
+            "download",
+            ExternalDownload(client=None, transfer_info=TRANSFER_INFO, file_path=None),
+            {
+                "system_name": "lumi",
+                "source_path": ALLOWED_REMOTE_PATH,
+                "target_path": ALLOWED_LOCAL_PATH,
+            },
+        ),
+    ],
+    ids=["upload", "download"],
+)
+def test_transfer_returns_only_the_job(tools, name, transfer, arguments):
+    """upload and download return the transfer job without the signed URLs."""
+    client_method(tools, name).return_value = transfer
+    result = call_through_mcp(tools, name, arguments)
+    assert result.data == TRANSFER_JOB
+
+
+@pytest.mark.parametrize(
+    ("name", "remote_args", "local_args", "other_args"),
+    [
+        ("upload", ["directory"], ["local_file"], {"filename": "f"}),
+        ("download", ["source_path"], ["target_path"], {}),
+    ],
+    ids=["upload", "download"],
+)
+def test_transfer_waits_for_the_data(tools, name, remote_args, local_args, other_args):
+    """upload and download always wait for the transfer job, because only then is the
+    data moved."""
+    call(tools, name, remote_args, local_args, other_args)
+    assert client_method(tools, name).call_args.kwargs["blocking"] is True
+    # The agent can't ask for a transfer that doesn't wait.
+    arguments = arguments_with_default_paths(remote_args, local_args, other_args)
+    arguments["system_name"] = "lumi"
+    arguments["blocking"] = False
+    with pytest.raises(ToolError, match="Unexpected keyword argument"):
+        call_through_mcp(tools, name, arguments)
 
 
 def submit(tools, script, **job_options):
@@ -348,19 +464,40 @@ def test_submit_denied(tools, job_options, error):
 def test_submit_needs_exactly_one_script(tools):
     """Exactly one of the three script arguments must be given."""
     with pytest.raises(ToolError, match="Exactly one"):
-        tools.submit("lumi", None)
+        tools.submit("lumi", ALLOWED_REMOTE_PATH)
     with pytest.raises(ToolError, match="Exactly one"):
-        tools.submit("lumi", None, script_str="x", script_local_path=ALLOWED_LOCAL_PATH)
+        tools.submit(
+            "lumi",
+            ALLOWED_REMOTE_PATH,
+            script_str="x",
+            script_local_path=ALLOWED_LOCAL_PATH,
+        )
+    tools.client.submit.assert_not_called()
+
+
+def test_submit_needs_working_dir(tools):
+    """submit refuses a job without a working directory, which FirecREST requires."""
+    arguments = {"system_name": "lumi", "working_dir": None, "script_str": "x"}
+    with pytest.raises(ToolError, match="working_dir"):
+        call_through_mcp(tools, "submit", arguments)
     tools.client.submit.assert_not_called()
 
 
 def test_submit_without_default_partition(config, mock_client):
     """Without default_partition, a partition must be given as an argument."""
-    config('[lumi]\naccounts = ["p"]\ndefault_account = "p"\npartitions = ["small"]\n')
+    config(
+        "[lumi]\n"
+        'remote_paths = ["/scratch/project_1"]\n'
+        'accounts = ["p"]\n'
+        'default_account = "p"\n'
+        'partitions = ["small"]\n'
+    )
     tools = Tools(mock_client)
     with pytest.raises(ToolError, match="No partition given"):
-        tools.submit("lumi", None, script_str="#SBATCH -p small")
-    tools.submit("lumi", None, script_str="#!/bin/bash", partition="small")
+        tools.submit("lumi", ALLOWED_REMOTE_PATH, script_str="#SBATCH -p small")
+    tools.submit(
+        "lumi", ALLOWED_REMOTE_PATH, script_str="#!/bin/bash", partition="small"
+    )
     tools.client.submit.assert_called_once()
 
 

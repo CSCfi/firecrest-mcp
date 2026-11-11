@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
-from firecrest.v2 import ExternalDownload, ExternalUpload, Firecrest
+from firecrest.v2 import Firecrest
 
 from firecrest_mcp.config import check_local_paths, load_cluster_config
 from firecrest_mcp.tools.params import (
@@ -273,25 +273,35 @@ class FirecrestFilesystemToolsMixin:
         directory: Annotated[str, "the absolute path of the target directory"],
         filename: Annotated[str, "the name of the file in the target directory"],
         account: Account = None,
-        blocking: Blocking = True,
-    ) -> ExternalUpload | None:
-        """Upload a file to the system. Small files are uploaded directly and are
-        available at once; None is returned. Large files are uploaded in parts to
-        FirecREST's staging area and then moved to the target directory in a transfer
-        job, whose information is returned.
+    ) -> dict | None:
+        """Upload a file to the system and return when it has arrived. A file under
+        1 MiB is uploaded in one request and None is returned. A larger file is moved
+        by a transfer job, and the job's information is returned.
         """
+        # FirecREST writes the file at the directory joined with the file name, so that
+        # joined path is what is checked. posixpath.join drops the directory if the
+        # file name starts with "/", and the directory would then go unchecked. An
+        # empty file name would make the directory itself the target.
+        if filename == "" or "/" in filename:
+            raise ToolError(f"Filename {filename!r} must not be empty or contain '/'.")
         check_local_paths(local_file)
         account = load_cluster_config().checked_transfer(
             account, posixpath.join(directory, filename)
         )
-        return self.client.upload(
+        transfer = self.client.upload(
             system_name,
             local_file=local_file,
             directory=directory,
             filename=filename,
             account=account,
-            blocking=blocking,
+            # The data is moved only while the call waits for the transfer job.
+            blocking=True,
         )
+        if transfer is None:
+            return None
+        # Only the job. The transfer directives hold signed URLs, which nothing here
+        # uses.
+        return transfer.transfer_data["transferJob"]
 
     @tool()
     def download(
@@ -302,15 +312,23 @@ class FirecrestFilesystemToolsMixin:
             str | pathlib.Path, "the local path to save the file to (can be relative)"
         ],
         account: Account = None,
-        blocking: Blocking = True,
-    ) -> ExternalDownload | None:
-        """Download a file from the remote system."""
+    ) -> dict | None:
+        """Download a file from the system and return when it has arrived. A file
+        under 1 MiB is downloaded in one request and None is returned. A larger file is
+        moved by a transfer job, and the job's information is returned.
+        """
         check_local_paths(target_path)
         account = load_cluster_config().checked_transfer(account, source_path)
-        return self.client.download(
+        transfer = self.client.download(
             system_name,
             source_path=source_path,
             target_path=target_path,
             account=account,
-            blocking=blocking,
+            # The data is moved only while the call waits for the transfer job.
+            blocking=True,
         )
+        if transfer is None:
+            return None
+        # Only the job. The transfer directives hold a signed URL, which nothing here
+        # uses.
+        return transfer.transfer_data["transferJob"]

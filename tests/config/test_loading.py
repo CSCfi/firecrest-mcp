@@ -209,6 +209,14 @@ def test_local_paths_must_be_strings(config, content):
         check_local_paths("data")
 
 
+def test_local_paths_empty_entry(config):
+    """An empty string in local_paths is a config error, so it can't allow the
+    working directory by mistake."""
+    config('local_paths = ["data", ""]\n')
+    with pytest.raises(ToolError, match="must not contain an empty string"):
+        check_local_paths("data")
+
+
 def test_active_config(config):
     """The config tool returns local_paths and this cluster's table with every
     key."""
