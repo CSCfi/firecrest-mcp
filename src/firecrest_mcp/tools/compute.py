@@ -8,13 +8,22 @@ from fastmcp.tools import tool
 from firecrest.v2 import Firecrest
 
 from firecrest_mcp.config import check_local_paths, load_cluster_config
-from firecrest_mcp.tools.params import SystemName
+from firecrest_mcp.tools.params import JobId, SystemName
+
+# Seconds that _user_name keeps the user's name. The name changes only if the token
+# file gets another account's token, such as a robot account's. own_jobs then uses
+# the old name for this long.
+USER_NAME_TTL = 3 * 60
+# Seconds that job_info keeps a result. submit and cancel_job clear it, so only
+# changes made elsewhere, such as a job that finishes, can show late.
+JOB_INFO_TTL = 20
+# Seconds that job_metadata keeps a result. A job's metadata doesn't change.
+JOB_METADATA_TTL = 60
 
 
-@cachetools.func.ttl_cache(maxsize=2, ttl=60 * 3)
+@cachetools.func.ttl_cache(maxsize=2, ttl=USER_NAME_TTL)
 def _user_name(client: Firecrest, system_name: str) -> str:
-    """Return the user's name on a system. It changes only if the token file is
-    replaced with another user's token, so it is cached for a few minutes."""
+    """Return the user's name on a system."""
     return client.userinfo(system_name)["user"]["name"]
 
 
@@ -37,7 +46,7 @@ class FirecrestComputeToolsMixin:
     def submit(
         self,
         system_name: SystemName,
-        working_dir: Annotated[str | None, "the working directory of the job"],
+        working_dir: Annotated[str, "the working directory of the job"],
         script_str: Annotated[str | None, "the job script"] = None,
         script_local_path: Annotated[str | None, "path to the job script"] = None,
         script_remote_path: Annotated[
@@ -66,7 +75,7 @@ class FirecrestComputeToolsMixin:
         account, partition = cluster.checked_job_options(
             account, partition, reservation
         )
-        return self.client.submit(
+        result = self.client.submit(
             system_name,
             working_dir=working_dir,
             script_str=script_str,
@@ -77,13 +86,22 @@ class FirecrestComputeToolsMixin:
             partition=partition,
             reservation=reservation,
         )
+        # The cached job lists don't have the new job.
+        FirecrestComputeToolsMixin.job_info.cache_clear()
+        return result
 
-    @tool()
-    @cachetools.func.ttl_cache(maxsize=10, ttl=20)
+    # The description replaces the docstring, so that it can name the cache time.
+    @tool(
+        description="Get information about your own Slurm jobs. Without a jobid,"
+        " list all of them that match the filters. Other users' jobs are not"
+        f" available. The result may be up to {JOB_INFO_TTL} seconds old, but jobs"
+        " that you submit or cancel show at once."
+    )
+    @cachetools.func.ttl_cache(maxsize=10, ttl=JOB_INFO_TTL)
     def job_info(
         self,
         system_name: SystemName,
-        jobid: Annotated[str | None, "the ID of the job"] = None,
+        jobid: JobId | None = None,
         account: Annotated[
             str | None, "show only the jobs of this account; ignored with a jobid"
         ] = None,
@@ -97,9 +115,6 @@ class FirecrestComputeToolsMixin:
             " Ignored with a jobid.",
         ] = None,
     ) -> list:
-        """Get information about your jobs. When the job is not specified, it will
-        return all of them. Other users' jobs are not available.
-        """
         jobs = self.client.job_info(
             system_name,
             jobid=jobid,
@@ -111,11 +126,11 @@ class FirecrestComputeToolsMixin:
         return own_jobs(self.client, system_name, jobs, jobid)
 
     @tool()
-    @cachetools.func.ttl_cache(maxsize=10, ttl=60)
+    @cachetools.func.ttl_cache(maxsize=10, ttl=JOB_METADATA_TTL)
     def job_metadata(
         self,
         system_name: SystemName,
-        jobid: Annotated[str, "the ID of the job"],
+        jobid: JobId,
     ) -> list[dict]:
         """Get the metadata of one of your jobs."""
         own_jobs(
@@ -130,7 +145,7 @@ class FirecrestComputeToolsMixin:
     def cancel_job(
         self,
         system_name: SystemName,
-        jobid: Annotated[str, "the ID of the job"],
+        jobid: JobId,
     ) -> dict:
         """Cancel one of your jobs."""
         own_jobs(
@@ -139,13 +154,16 @@ class FirecrestComputeToolsMixin:
             self.client.job_info(system_name, jobid=jobid),
             jobid,
         )
-        return self.client.cancel_job(system_name, jobid=jobid)
+        result = self.client.cancel_job(system_name, jobid=jobid)
+        # The cached job lists show the job in its state before the cancel.
+        FirecrestComputeToolsMixin.job_info.cache_clear()
+        return result
 
     @tool()
     def attach_to_job(
         self,
         system_name: SystemName,
-        jobid: Annotated[str, "the ID of the job"],
+        jobid: JobId,
         command: Annotated[str, "the command to be executed"],
     ) -> dict:
         """Run a command inside one of your running jobs."""

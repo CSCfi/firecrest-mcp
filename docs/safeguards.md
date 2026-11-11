@@ -54,7 +54,8 @@ fails with the same error as the other tools when the file is missing or invalid
 workstation. It must be an entry of `local_paths` or lie below one. Paths are compared
 by whole components, so `data_old` is not under `data`. Wildcards in the entries are
 not expanded. The server checks where the path really leads, so a symlink or `..` can't
-reach outside `local_paths`. Relative paths start from the project directory.
+reach outside `local_paths`. Relative paths start from the project directory. An empty
+entry is a config error, so the whole project directory must be written as `.`.
 
 Overwriting some files on the workstation with `download` could widen what the agent may
 do or make it run commands, while `upload` could send the token to the cluster. The
@@ -63,6 +64,13 @@ server refuses these paths even if `local_paths` allows them:
 - the config file `.firecrest-mcp.toml`,
 - `.mcp.json`, `.claude/` and `.git/` in the project directory,
 - the token file.
+
+## System names and job IDs
+
+Every tool except `systems` takes a system name, which pyfirecrest puts into the request
+URL unchanged. The server accepts only letters, digits, `_` and `-` in it, so a system
+name can't change which URL a tool requests. Job IDs go into the URL the same way, and
+the server accepts only letters and digits in them, as FirecREST's job endpoints do.
 
 ## Remote paths
 
@@ -75,8 +83,9 @@ All file, transfer and job tools that take a path on the cluster check it:
   components and without wildcards, as local paths are.
 - LUMI's `/project` and `/projappl` count as the same directory, so either name in the
   file allows both.
-- `symlink` checks both the path of the new link and the path it points to, and
-  `upload` checks the target directory joined with the file name.
+- `symlink` checks both the path of the new link and the path it points to. `upload`
+  checks the target directory joined with the file name, and refuses a file name that
+  is empty or contains `/`.
 
 The server doesn't resolve symlinks on the cluster, so a link inside `remote_paths` can
 lead outside it.

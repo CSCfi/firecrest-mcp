@@ -60,7 +60,9 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
   skips FastMCP's validation of the arguments and its conversion of the result.
   `test_tool_works_through_fastmcp` in `tests/config/test_tools.py` calls every tool
   once with `call_through_mcp`. `MOCK_CLIENT_RESULTS` there holds what the mock
-  client returns for a tool. A tool that isn't listed returns an empty dict.
+  client returns for a tool. A tool that isn't listed returns an empty dict. The
+  patterns on `SystemName` and `JobId` in `tools/params.py` are checked only by
+  FastMCP, so their tests use `call_through_mcp`.
 - **Client calls**: pass everything after `system_name` to `self.client` methods by
   keyword. pyfirecrest's untyped `_with_correlation_id` decorator hides their
   signatures from ty, so only the names catch a wrong argument. The tests' mock

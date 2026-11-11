@@ -2,7 +2,24 @@
 
 from typing import Annotated, Literal
 
-SystemName = Annotated[str, "the system name, as listed by the systems tool"]
+from pydantic import Field
+
+# pyfirecrest puts the system name into the request URL unchanged, so "/", "?" or
+# ".." in it change which URL is requested. FastMCP checks the pattern before the
+# tool runs.
+SystemName = Annotated[
+    str,
+    Field(
+        description="the system name, as listed by the systems tool",
+        pattern="^[A-Za-z0-9_-]+$",
+    ),
+]
+# pyfirecrest also puts the job ID into the request URL unchanged. The pattern is the
+# one FirecREST's job endpoints check.
+JobId = Annotated[
+    str,
+    Field(description="the ID of the job", pattern="^[a-zA-Z0-9]+$"),
+]
 RemotePath = Annotated[str, "an absolute path on the system"]
 Account = Annotated[
     str | None,

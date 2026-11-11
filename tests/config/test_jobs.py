@@ -1,9 +1,13 @@
-"""Tests that the job tools only reach the user's own jobs."""
+"""Tests for the job tools, which reach only the user's own jobs and cache the job
+list."""
+
+import asyncio
 
 import pytest
+from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 
-from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
+from firecrest_mcp.tools.compute import JOB_INFO_TTL, FirecrestComputeToolsMixin
 
 MINE = {"jobId": 1, "user": "me"}
 THEIRS = {"jobId": 2, "user": "someone"}
@@ -62,3 +66,35 @@ def test_other_users_job_by_id_denied(tool, args, mock_client):
         tools.client.job_metadata.assert_not_called()
         tools.client.attach_to_job.assert_not_called()
         tools.client.cancel_job.assert_not_called()
+
+
+def test_job_list_after_submit(config, mock_client):
+    """A job list right after submit asks FirecREST again and has the new job."""
+    config()
+    new_job = {"jobId": 3, "user": "me"}
+    tools = Tools(mock_client, [MINE])
+    assert call(tools, "job_info") == [MINE]
+    tools.submit("lumi", "/scratch/project_1/x", script_str="#!/bin/bash")
+    tools.client.job_info.return_value = [MINE, new_job]
+    assert call(tools, "job_info") == [MINE, new_job]
+
+
+def test_job_list_after_cancel(mock_client):
+    """A job list right after cancel_job asks FirecREST again and shows the change."""
+    cancelled_job = {"jobId": 1, "user": "me", "status": {"state": "CANCELLED"}}
+    tools = Tools(mock_client, [MINE])
+    assert call(tools, "job_info") == [MINE]
+    tools.cancel_job("lumi", "1")
+    tools.client.job_info.return_value = [cancelled_job]
+    assert call(tools, "job_info") == [cancelled_job]
+
+
+def test_job_list_description_gives_cache_time(mock_client):
+    """The description of job_info that the agent sees gives the cache time."""
+    server = FastMCP("test")
+    server.add_tool(Tools(mock_client, []).job_info)
+    listed_tools = asyncio.run(server.list_tools())
+    # job_info is the only tool on this server.
+    description = listed_tools[0].description
+    assert description is not None
+    assert f"up to {JOB_INFO_TTL} seconds old" in description
