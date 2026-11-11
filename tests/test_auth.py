@@ -28,7 +28,6 @@ def token_file(tmp_path, monkeypatch):
     def write(content: str, mode: int = 0o600):
         path.write_text(content)
         path.chmod(mode)
-        return path
 
     return write
 
@@ -54,9 +53,10 @@ def test_token_reread_on_every_request(token_file):
     auth = TokenAuth()
     token_file(VALID)
     assert auth.get_access_token() == VALID
-    new = make_token(exp=time.time() + 7200)
-    token_file(new)
-    assert auth.get_access_token() == new
+    # A different exp gives a different token.
+    second_token = make_token(exp=time.time() + 7200)
+    token_file(second_token)
+    assert auth.get_access_token() == second_token
 
 
 @pytest.mark.parametrize("mode", [0o640, 0o604, 0o620, 0o602, 0o610, 0o601])

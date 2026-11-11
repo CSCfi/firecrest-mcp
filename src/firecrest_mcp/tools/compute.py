@@ -39,6 +39,12 @@ def own_jobs(
     return own
 
 
+def check_own_job(client: Firecrest, system_name: str, jobid: str) -> None:
+    """Raise a ToolError unless the job belongs to the user."""
+    jobs = client.job_info(system_name, jobid=jobid)
+    own_jobs(client, system_name, jobs, jobid)
+
+
 class FirecrestComputeToolsMixin:
     client: Firecrest
 
@@ -48,7 +54,11 @@ class FirecrestComputeToolsMixin:
         system_name: SystemName,
         working_dir: Annotated[str, "the working directory of the job"],
         script_str: Annotated[str | None, "the job script"] = None,
-        script_local_path: Annotated[str | None, "path to the job script"] = None,
+        script_local_path: Annotated[
+            str | None,
+            "the local path of the job script, absolute or relative to the server's"
+            " working directory",
+        ] = None,
         script_remote_path: Annotated[
             str | None, "path to the job script on the system"
         ] = None,
@@ -133,12 +143,7 @@ class FirecrestComputeToolsMixin:
         jobid: JobId,
     ) -> list[dict]:
         """Get the metadata of one of your jobs."""
-        own_jobs(
-            self.client,
-            system_name,
-            self.client.job_info(system_name, jobid=jobid),
-            jobid,
-        )
+        check_own_job(self.client, system_name, jobid)
         return self.client.job_metadata(system_name, jobid=jobid)
 
     @tool()
@@ -148,12 +153,7 @@ class FirecrestComputeToolsMixin:
         jobid: JobId,
     ) -> dict:
         """Cancel one of your jobs."""
-        own_jobs(
-            self.client,
-            system_name,
-            self.client.job_info(system_name, jobid=jobid),
-            jobid,
-        )
+        check_own_job(self.client, system_name, jobid)
         result = self.client.cancel_job(system_name, jobid=jobid)
         # The cached job lists show the job in its state before the cancel.
         FirecrestComputeToolsMixin.job_info.cache_clear()
@@ -167,10 +167,5 @@ class FirecrestComputeToolsMixin:
         command: Annotated[str, "the command to be executed"],
     ) -> dict:
         """Run a command inside one of your running jobs."""
-        own_jobs(
-            self.client,
-            system_name,
-            self.client.job_info(system_name, jobid=jobid),
-            jobid,
-        )
+        check_own_job(self.client, system_name, jobid)
         return self.client.attach_to_job(system_name, jobid=jobid, command=command)

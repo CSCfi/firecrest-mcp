@@ -35,11 +35,14 @@ def test_allowed(config, path):
         "/scratch",
         "/scratch/project_10",
         "/projappl/project_10/file",
+        # PurePosixPath keeps a leading // as a separate root, so this path is not
+        # below /scratch.
         "//scratch/project_1/file",
     ],
 )
 def test_denied(config, path):
-    """Parents, siblings with a shared name prefix and //-paths are denied."""
+    """Parents, siblings with a shared name prefix and paths that start with // are
+    denied."""
     config()
     with pytest.raises(ToolError, match="is not in"):
         check_remote_paths(path)
@@ -93,7 +96,10 @@ def test_other_special_characters_allowed(config):
 def test_denied_by_config(config, remote_paths, path):
     """An empty or missing remote_paths allows nothing, entries are literal paths
     rather than patterns, and the LUMI alias maps only whole directories."""
-    config("[lumi]\n" + (f"remote_paths = {remote_paths}\n" if remote_paths else ""))
+    content = "[lumi]\n"
+    if remote_paths is not None:
+        content += f"remote_paths = {remote_paths}\n"
+    config(content)
     with pytest.raises(ToolError, match="is not in remote_paths"):
         check_remote_paths(path)
 

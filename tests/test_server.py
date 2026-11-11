@@ -4,6 +4,7 @@ import asyncio
 import importlib
 
 import pytest
+from fastmcp.decorators import get_fastmcp_meta
 
 from firecrest_mcp import main
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
@@ -20,12 +21,14 @@ def test_registered_tools(monkeypatch):
         FirecrestFilesystemToolsMixin,
         FirecrestStatusToolsMixin,
     ]
-    expected = {
-        name
-        for mixin in mixins
-        for name in dir(mixin)
-        if callable(getattr(mixin, name)) and not name.startswith("__")
-    }
+    expected = set()
+    for mixin in mixins:
+        for name in dir(mixin):
+            # The same rule as the registration loop in server.py.
+            if name.startswith("_"):
+                continue
+            if get_fastmcp_meta(getattr(mixin, name)) is not None:
+                expected.add(name)
     # server.py reads FIRECREST_URL when it is imported.
     monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
     server = importlib.import_module("firecrest_mcp.server")
@@ -56,7 +59,7 @@ def test_context_headers(monkeypatch):
 
 
 @pytest.fixture
-def run(monkeypatch):
+def recorded_runs(monkeypatch):
     """Replaces mcp.run of the server and returns the keyword arguments of each call."""
     monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
     server = importlib.import_module("firecrest_mcp.server")
@@ -65,16 +68,16 @@ def run(monkeypatch):
     return calls
 
 
-def test_main_stdio(run):
+def test_main_stdio(recorded_runs):
     """Without options, the server runs over stdio."""
     main([])
-    assert run == [{"transport": "stdio"}]
+    assert recorded_runs == [{"transport": "stdio"}]
 
 
-def test_main_http(run):
+def test_main_http(recorded_runs):
     """Over HTTP the server checks the Host header and allows the listed host names."""
     main(["--transport", "http", "--allowed-host", "a", "--allowed-host", "b"])
-    assert run == [
+    assert recorded_runs == [
         {
             "transport": "http",
             "host": "127.0.0.1",
@@ -85,18 +88,18 @@ def test_main_http(run):
     ]
 
 
-def test_main_http_host_port(run):
+def test_main_http_host_port(recorded_runs):
     """--host and --port set the address and port the server listens on."""
     main(["--transport", "http", "--host", "::1", "--port", "9000"])
-    assert run[0]["host"] == "::1"
-    assert run[0]["port"] == 9000
+    assert recorded_runs[0]["host"] == "::1"
+    assert recorded_runs[0]["port"] == 9000
 
 
 @pytest.mark.parametrize(
     "options", [["--host", "::1"], ["--port", "9000"], ["--allowed-host", "a"]]
 )
-def test_main_stdio_rejects_http_options(run, options):
+def test_main_stdio_rejects_http_options(recorded_runs, options):
     """The HTTP options are refused over stdio, where they would have no effect."""
     with pytest.raises(SystemExit):
         main(options)
-    assert run == []
+    assert recorded_runs == []

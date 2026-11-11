@@ -48,9 +48,9 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
 - **Tool registration** (`src/firecrest_mcp/server.py`): tools live as
   `@tool()`-decorated methods on three mixins in `tools/` (`compute`, `filesystem`,
   `status`), combined into `FirecrestClientWrapper`, which holds `self.client`. The
-  server then registers **every callable non-dunder attribute** of the wrapper as an
-  MCP tool, so any helper method added to a mixin becomes a tool too — keep helpers
-  out of the mixins (or make them module-level functions).
+  server then registers every public method of the wrapper that has `@tool()`, as
+  FastMCP's own discovery of tools in a module does. A helper method without
+  `@tool()` is not a tool.
   The `config` tool doesn't call FirecREST, so it isn't on a mixin. `server.py`
   registers `active_config()` from `config.py` under that name.
   `tests/test_server.py` checks that the server registers exactly the mixins' tools
@@ -98,9 +98,10 @@ before calling the client:
   `default_account` for `None`. Pass the result on to the client. Tools that may run
   a transfer job call `checked_transfer(account, *paths)`, which checks both.
 - `ClusterConfig.check_group(group)` for `chgrp`.
-- `own_jobs(client, system_name, jobs, jobid)` in `tools/compute.py` for job queries
-  and for tools that act on a job by ID, since FirecREST returns any user's job by ID.
-  It doesn't depend on the config.
+- `own_jobs(client, system_name, jobs, jobid)` in `tools/compute.py` for job
+  queries, and `check_own_job(client, system_name, jobid)` there for tools that act on
+  a job by ID, since FirecREST returns any user's job by ID. They don't depend on the
+  config.
 - `ClusterConfig.checked_job_options` for `submit`. It checks the arguments, not the
   script, and returns an account and partition that always override the script's
   `#SBATCH` lines.

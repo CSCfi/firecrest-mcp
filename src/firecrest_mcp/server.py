@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from fastmcp import FastMCP
+from fastmcp.decorators import get_fastmcp_meta
 from firecrest.v2 import Firecrest
 
 from firecrest_mcp.auth import TokenAuth
@@ -41,17 +42,23 @@ CONTEXT_DIR = Path(__file__).parent / "context"
 
 def instructions_for(cluster: str) -> str:
     """Returns the ground rules, followed by context/<cluster>.md if there is one."""
-    context = {path.stem: path for path in CONTEXT_DIR.glob("*.md")}.get(cluster)
-    parts = [GROUND_RULES, context] if context else [GROUND_RULES]
+    parts = [GROUND_RULES]
+    context_file = CONTEXT_DIR / f"{cluster}.md"
+    if context_file.exists():
+        parts.append(context_file)
     return "\n".join(part.read_text() for part in parts)
 
 
 mcp = FastMCP("FirecREST v2", instructions=instructions_for(cluster_name()))
 
+# Only the public methods with @tool() are tools, as in FastMCP's own discovery of
+# tools in a module.
 for name in dir(fc):
-    attr = getattr(fc, name)
-    if callable(attr) and not name.startswith("__"):
-        mcp.add_tool(attr)
+    if name.startswith("_"):
+        continue
+    method = getattr(fc, name)
+    if get_fastmcp_meta(method) is not None:
+        mcp.add_tool(method)
 
 # Tools that don't use the FirecREST client are registered here.
 mcp.tool(active_config, name="config")

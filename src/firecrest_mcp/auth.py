@@ -15,11 +15,10 @@ def token_path() -> Path:
 
 
 class TokenAuth:
-    def __init__(self):
-        pass
-
-    def _is_token_valid(self, token: str) -> bool:
+    def _is_unexpired_jwt(self, token: str) -> bool:
         try:
+            # Only the expiry is read here. FirecREST verifies the signature, and the
+            # client has no key.
             payload = jwt.decode(
                 token,
                 options={
@@ -47,6 +46,9 @@ class TokenAuth:
             raise RuntimeError(f"Could not read token file {path}: {e}") from e
         if not token:
             raise RuntimeError(f"Token file {path} is empty.")
-        if not self._is_token_valid(token):
-            raise RuntimeError("Token is invalid or has expired.")
+        if not self._is_unexpired_jwt(token):
+            raise RuntimeError(
+                f"Token file {path} holds a token that is invalid or has expired. "
+                "Write a new token to it."
+            )
         return token

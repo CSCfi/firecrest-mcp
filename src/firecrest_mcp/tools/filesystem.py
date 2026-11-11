@@ -1,6 +1,5 @@
 """Tools for files on the system, and for uploading and downloading them."""
 
-import pathlib
 import posixpath
 import re
 from typing import Annotated
@@ -11,12 +10,12 @@ from firecrest.v2 import Firecrest
 
 from firecrest_mcp.config import check_local_paths, load_cluster_config
 from firecrest_mcp.tools.params import (
-    Account,
     Blocking,
     Compression,
     RemotePath,
     SystemName,
     Timeout,
+    TransferAccount,
 )
 
 
@@ -65,6 +64,7 @@ class FirecrestFilesystemToolsMixin:
         else:
             return self.client.view(system_name, path=path)
         # head and tail also report positions, but only the text is of use here.
+        # FirecREST's schema allows a null output.
         return output["content"] if output else ""
 
     @tool()
@@ -148,7 +148,7 @@ class FirecrestFilesystemToolsMixin:
         system_name: SystemName,
         source_path: RemotePath,
         target_path: RemotePath,
-        account: Account = None,
+        account: TransferAccount = None,
         blocking: Blocking = True,
         timeout: Timeout = None,
     ) -> dict:
@@ -175,7 +175,7 @@ class FirecrestFilesystemToolsMixin:
         target_path: Annotated[str, "the absolute path of the new archive"],
         dereference: Annotated[bool, "follow symbolic links"] = False,
         compression: Compression = "gzip",
-        account: Account = None,
+        account: TransferAccount = None,
         blocking: Blocking = True,
     ) -> None:
         """Compress a directory or file."""
@@ -184,7 +184,7 @@ class FirecrestFilesystemToolsMixin:
         )
         # match_pattern is left out: FirecREST puts it into a shell command without
         # escaping it.
-        return self.client.compress(
+        self.client.compress(
             system_name,
             source_path=source_path,
             target_path=target_path,
@@ -201,14 +201,14 @@ class FirecrestFilesystemToolsMixin:
         source_path: Annotated[str, "the absolute path of the archive"],
         target_path: Annotated[str, "the absolute path of the target directory"],
         compression: Compression = "gzip",
-        account: Account = None,
+        account: TransferAccount = None,
         blocking: Blocking = True,
     ) -> None:
         """Extract compressed archives."""
         account = load_cluster_config().checked_transfer(
             account, source_path, target_path
         )
-        return self.client.extract(
+        self.client.extract(
             system_name,
             source_path=source_path,
             target_path=target_path,
@@ -225,10 +225,12 @@ class FirecrestFilesystemToolsMixin:
         target_path: RemotePath,
         dereference: Annotated[bool, "follow symbolic links"] = False,
         blocking: Blocking = True,
-        account: Account = None,
+        account: TransferAccount = None,
         timeout: Timeout = None,
     ) -> dict:
-        """Copies file from source_path to target_path."""
+        """Copy a file or a directory with its contents from source_path to
+        target_path, replacing an existing target. This operation runs in a job.
+        """
         account = load_cluster_config().checked_transfer(
             account, source_path, target_path
         )
@@ -247,7 +249,7 @@ class FirecrestFilesystemToolsMixin:
         self,
         system_name: SystemName,
         path: RemotePath,
-        account: Account = None,
+        account: TransferAccount = None,
         blocking: Blocking = True,
         timeout: Timeout = None,
     ) -> dict | None:
@@ -268,11 +270,13 @@ class FirecrestFilesystemToolsMixin:
         self,
         system_name: SystemName,
         local_file: Annotated[
-            str | pathlib.Path, "the local path of the file (can be relative)"
+            str,
+            "the local path of the file, absolute or relative to the server's working"
+            " directory",
         ],
         directory: Annotated[str, "the absolute path of the target directory"],
         filename: Annotated[str, "the name of the file in the target directory"],
-        account: Account = None,
+        account: TransferAccount = None,
     ) -> dict | None:
         """Upload a file to the system and return when it has arrived. A file under
         1 MiB is uploaded in one request and None is returned. A larger file is moved
@@ -309,9 +313,11 @@ class FirecrestFilesystemToolsMixin:
         system_name: SystemName,
         source_path: RemotePath,
         target_path: Annotated[
-            str | pathlib.Path, "the local path to save the file to (can be relative)"
+            str,
+            "the local path to save the file to, absolute or relative to the server's"
+            " working directory",
         ],
-        account: Account = None,
+        account: TransferAccount = None,
     ) -> dict | None:
         """Download a file from the system and return when it has arrived. A file
         under 1 MiB is downloaded in one request and None is returned. A larger file is
