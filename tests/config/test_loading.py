@@ -68,7 +68,7 @@ def test_cluster_name_underivable(monkeypatch, url):
 @pytest.mark.parametrize(
     ("content", "error"),
     [
-        ("[lumi", "firecrest-mcp.toml: "),
+        ("[lumi", "Expected ']'"),
         ("remote_paths = []", "remote_paths must be a table"),
         ("[lumi]\nremote_path = ['/p']", "lumi.remote_path: Extra inputs"),
         (
@@ -112,7 +112,7 @@ def test_changes_apply_without_reload(config):
     config('[lumi]\nremote_paths = ["/scratch/project_1/"]\n')
     load_cluster_config().check_remote_paths("/scratch/project_1/file")
     config('[lumi]\nremote_paths = ["/scratch/project_2/"]\n')
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="is not in remote_paths"):
         load_cluster_config().check_remote_paths("/scratch/project_1/file")
 
 
@@ -187,8 +187,9 @@ def test_local_symlink_resolved(local, tmp_path):
     [".firecrest-mcp.toml", ".mcp.json", ".claude/x", ".git/hooks/x", "token"],
 )
 def test_local_protected(config, path):
-    """Server and agent configuration and the token file (FIRECREST_TOKEN_PATH, in
-    the working directory here) are never allowed, even below local_paths."""
+    """Server and agent configuration and the token file are never allowed, even
+    below local_paths. The config fixture puts the token file at "token" in the
+    working directory."""
     config('local_paths = ["."]\n')
     with pytest.raises(ToolError, match="is protected"):
         check_local_paths(path)

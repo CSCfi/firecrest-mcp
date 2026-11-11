@@ -20,9 +20,21 @@ from firecrest_mcp.auth import token_path
 # Resolved against the working directory of the server process.
 CONFIG_PATH = Path(".firecrest-mcp.toml")
 
-# Local paths that are never allowed, because writing them could change the server's
-# or the agent's own configuration or run code: relative to the working directory.
-PROTECTED_LOCAL_PATHS = (CONFIG_PATH, Path(".mcp.json"), Path(".claude"), Path(".git"))
+
+def _protected_local_paths() -> list[Path]:
+    """Return the local paths that no tool may use, resolved."""
+    # A tool that writes to these files could change the server's or the agent's
+    # configuration or run code, and one that reads the token file could copy the
+    # token. Relative paths are relative to the working directory.
+    paths = [
+        CONFIG_PATH,
+        Path(".mcp.json"),
+        Path(".claude"),
+        Path(".git"),
+        token_path(),
+    ]
+    return [path.resolve() for path in paths]
+
 
 # Directories that a cluster has under two names, by cluster. Config entries and
 # checked paths are rewritten to the second name before they are compared, so
@@ -66,7 +78,12 @@ def cluster_name() -> str:
     the FIRECREST_URL hostname other than "api", e.g. "roihu" for
     https://api.roihu.csc.fi/v1."""
     url = os.getenv("FIRECREST_URL", "")
-    labels = [label for label in (urlsplit(url).hostname or "").split(".") if label]
+    hostname = urlsplit(url).hostname or ""
+    # Drop the empty labels of a missing hostname or of one like "a..b".
+    labels = []
+    for label in hostname.split("."):
+        if label:
+            labels.append(label)
     if labels and labels[0] == "api":
         labels.pop(0)
     if not labels:
@@ -102,9 +119,11 @@ class ClusterConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check_defaults(self) -> Self:
-        for option in ("account", "partition"):
-            default = getattr(self, f"default_{option}")
-            if default not in (None, *getattr(self, f"{option}s")):
+        for option, default, allowed in [
+            ("account", self.default_account, self.accounts),
+            ("partition", self.default_partition, self.partitions),
+        ]:
+            if default is not None and default not in allowed:
                 raise ValueError(f"default_{option} {default!r} is not in {option}s")
         return self
 
@@ -163,7 +182,9 @@ class ClusterConfig(BaseModel):
             ("partition", partition, self.partitions),
             ("reservation", reservation, self.reservations),
         ]:
-            for value in [] if argument is None else argument.split(","):
+            if argument is None:
+                continue
+            for value in argument.split(","):
                 if value not in allowed:
                     raise _not_allowed(option.capitalize(), value, f"{option}s")
 
@@ -200,12 +221,16 @@ def load_cluster_config() -> ClusterConfig:
     try:
         return ClusterConfig.model_validate(data[name])
     except ValidationError as e:
-        raise _config_error(
-            "; ".join(
-                f"{'.'.join(map(str, (name, *err['loc'])))}: {err['msg']}"
-                for err in e.errors()
-            )
-        ) from None
+        problems = []
+        for err in e.errors():
+            # loc is the path to the bad value inside the table, e.g.
+            # ("remote_paths", 0).
+            parts = [name]
+            for part in err["loc"]:
+                parts.append(str(part))
+            location = ".".join(parts)
+            problems.append(f"{location}: {err['msg']}")
+        raise _config_error("; ".join(problems)) from None
 
 
 def _local_path_entries() -> list[str]:
@@ -222,12 +247,12 @@ def _local_path_entries() -> list[str]:
 
 def check_local_paths(*paths: str | os.PathLike | None) -> None:
     """Raise a ToolError unless every given local path is one of the top-level
-    local_paths or lies below one. Relative entries and paths are relative to the
+    local_paths or lies below one. The paths from _protected_local_paths() are
+    refused even there. Relative entries and paths are relative to the
     working directory, and both are resolved, following symlinks, before they are
     compared. ``None`` values are skipped."""
     allowed = [Path(entry).expanduser().resolve() for entry in _local_path_entries()]
-    protected = [p.resolve() for p in PROTECTED_LOCAL_PATHS]
-    protected.append(token_path().resolve())
+    protected = _protected_local_paths()
     for path in paths:
         if path is None:
             continue
@@ -239,9 +264,9 @@ def check_local_paths(*paths: str | os.PathLike | None) -> None:
 
 
 def active_config() -> dict:
-    """Returns the settings from .firecrest-mcp.toml that apply to this server:
-    local_paths and this cluster's table, with every key and [] or null for a missing
-    key, which allows nothing. The file is read on every call."""
+    """Return the settings from .firecrest-mcp.toml that apply to this server:
+    local_paths and this cluster's table. A key that is missing from the file is shown
+    as [] or null and allows nothing. The file is read on every call."""
     return {
         "local_paths": _local_path_entries(),
         cluster_name(): load_cluster_config().model_dump(),

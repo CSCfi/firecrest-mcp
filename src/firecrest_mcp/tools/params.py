@@ -4,6 +4,9 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
+# FastMCP shows a string in Annotated to the agent as the parameter's description.
+# Field(description=...) does the same where a pattern is needed too.
+
 # pyfirecrest puts the system name into the request URL unchanged, so "/", "?" or
 # ".." in it change which URL is requested. FastMCP checks the pattern before the
 # tool runs.
@@ -21,7 +24,7 @@ JobId = Annotated[
     Field(description="the ID of the job", pattern="^[a-zA-Z0-9]+$"),
 ]
 RemotePath = Annotated[str, "an absolute path on the system"]
-Account = Annotated[
+TransferAccount = Annotated[
     str | None,
     "the account for the transfer job, if one is needed; defaults to the"
     " default_account in the config",

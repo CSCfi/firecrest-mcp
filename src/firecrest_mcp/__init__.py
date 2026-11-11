@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> None:
     ):
         parser.error("--host, --port and --allowed-host need --transport http")
 
+    # Imported here because server.py needs FIRECREST_URL, and --help and option
+    # errors should work without it.
     from firecrest_mcp.server import mcp
 
     if args.transport == "stdio":

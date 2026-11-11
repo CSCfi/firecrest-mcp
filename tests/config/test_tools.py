@@ -7,6 +7,7 @@ import asyncio
 
 import pytest
 from fastmcp import Client, FastMCP
+from fastmcp.decorators import get_fastmcp_meta
 from fastmcp.exceptions import ToolError
 from firecrest.v2 import ExternalDownload, ExternalUpload
 
@@ -181,14 +182,15 @@ def ids(entries):
 
 def test_every_tool_is_listed():
     """A new tool must be added to TOOLS_RESTRICTED or to TOOLS_NOT_RESTRICTED. The
-    tools are listed as server.py registers them: every callable non-dunder
-    attribute."""
+    tools are listed as server.py registers them: every public method with @tool()."""
 
-    tools = {
-        name
-        for name in dir(Tools)
-        if callable(getattr(Tools, name)) and not name.startswith("__")
-    }
+    tools = set()
+    for name in dir(Tools):
+        # The same rule as the registration loop in server.py.
+        if name.startswith("_"):
+            continue
+        if get_fastmcp_meta(getattr(Tools, name)) is not None:
+            tools.add(name)
     assert tools == {tool[0] for tool in ALL_TOOLS}, (
         "Add a new tool to TOOLS_RESTRICTED, or to TOOLS_NOT_RESTRICTED if the config"
         " controls none of its arguments. Remove a deleted tool from them."
