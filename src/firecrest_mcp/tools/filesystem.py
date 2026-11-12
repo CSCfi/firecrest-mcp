@@ -22,6 +22,19 @@ from firecrest_mcp.tools.params import (
 class FirecrestFilesystemToolsMixin:
     client: Firecrest
 
+    def _use_direct_transfer_limit(self, system_name: str) -> None:
+        """Set the size under which pyfirecrest uploads or downloads a file in one
+        request to the system's limit for that.
+
+        pyfirecrest's own limit is 1 MiB, while a system's FirecREST may allow more.
+        The limit stays unchanged if the system isn't in the list of systems.
+        """
+        for system in self.client.systems():
+            if system["name"] == system_name:
+                limit = system["dataOperation"]["max_ops_file_size"]
+                self.client.MAX_DIRECT_UPLOAD_SIZE = limit
+                return
+
     @tool()
     def list_files(
         self,
@@ -279,8 +292,9 @@ class FirecrestFilesystemToolsMixin:
         account: TransferAccount = None,
     ) -> dict | None:
         """Upload a file to the system and return when it has arrived. A file under
-        1 MiB is uploaded in one request and None is returned. A larger file is moved
-        by a transfer job, and the job's information is returned.
+        the system's limit for direct uploads is uploaded in one request and None is
+        returned. A larger file is moved by a transfer job, and the job's information
+        is returned.
         """
         # FirecREST writes the file at the directory joined with the file name, so that
         # joined path is what is checked. posixpath.join drops the directory if the
@@ -292,15 +306,16 @@ class FirecrestFilesystemToolsMixin:
         account = load_cluster_config().checked_transfer(
             account, posixpath.join(directory, filename)
         )
+        self._use_direct_transfer_limit(system_name)
         transfer = self.client.upload(
             system_name,
             local_file=local_file,
             directory=directory,
             filename=filename,
             account=account,
-            # With False, pyfirecrest leaves the transfer of a file of 1 MiB or more
-            # unfinished. It returns an object to finish it with, which this tool
-            # doesn't keep. See "External transfers" in
+            # With False, pyfirecrest leaves the transfer of a file too large for a
+            # direct transfer unfinished. It returns an object to finish it with,
+            # which this tool doesn't keep. See "External transfers" in
             # https://pyfirecrest.readthedocs.io/en/latest/tutorial_basic_v2.html
             blocking=True,
         )
@@ -323,18 +338,20 @@ class FirecrestFilesystemToolsMixin:
         account: TransferAccount = None,
     ) -> dict | None:
         """Download a file from the system and return when it has arrived. A file
-        under 1 MiB is downloaded in one request and None is returned. A larger file is
-        moved by a transfer job, and the job's information is returned.
+        under the system's limit for direct downloads is downloaded in one request and
+        None is returned. A larger file is moved by a transfer job, and the job's
+        information is returned.
         """
         check_local_paths(target_path)
         account = load_cluster_config().checked_transfer(account, source_path)
+        self._use_direct_transfer_limit(system_name)
         transfer = self.client.download(
             system_name,
             source_path=source_path,
             target_path=target_path,
             account=account,
-            # With False, pyfirecrest leaves the transfer of a file of 1 MiB or more
-            # unfinished, as in upload.
+            # With False, pyfirecrest leaves the transfer of a file too large for a
+            # direct transfer unfinished, as in upload.
             blocking=True,
         )
         if transfer is None:
