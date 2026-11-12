@@ -298,7 +298,10 @@ class FirecrestFilesystemToolsMixin:
             directory=directory,
             filename=filename,
             account=account,
-            # The data is moved only while the call waits for the transfer job.
+            # With False, pyfirecrest leaves the transfer of a file of 1 MiB or more
+            # unfinished. It returns an object to finish it with, which this tool
+            # doesn't keep. See "External transfers" in
+            # https://pyfirecrest.readthedocs.io/en/latest/tutorial_basic_v2.html
             blocking=True,
         )
         if transfer is None:
@@ -330,7 +333,8 @@ class FirecrestFilesystemToolsMixin:
             source_path=source_path,
             target_path=target_path,
             account=account,
-            # The data is moved only while the call waits for the transfer job.
+            # With False, pyfirecrest leaves the transfer of a file of 1 MiB or more
+            # unfinished, as in upload.
             blocking=True,
         )
         if transfer is None:
