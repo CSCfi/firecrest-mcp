@@ -30,7 +30,7 @@ MOCK_OWN_JOB = {"jobId": "1", "user": "me"}
 # empty dict. None means that the client returns nothing.
 MOCK_CLIENT_RESULTS = {
     "userinfo": MOCK_USERINFO,
-    "systems": [{"name": "lumi"}],
+    "systems": [{"name": "lumi", "dataOperation": {"max_ops_file_size": 33554432}}],
     "partitions": [{"name": "small"}],
     "reservations": [{"name": "training"}],
     "list_files": [{"name": "x"}],
@@ -395,6 +395,23 @@ def test_transfer_waits_for_the_data(tools, name, remote_args, local_args, other
     arguments["blocking"] = False
     with pytest.raises(ToolError, match="Unexpected keyword argument"):
         call_through_mcp(tools, name, arguments)
+
+
+@pytest.mark.parametrize(
+    ("name", "remote_args", "local_args", "other_args"),
+    [
+        ("upload", ["directory"], ["local_file"], {"filename": "f"}),
+        ("download", ["source_path"], ["target_path"], {}),
+    ],
+    ids=["upload", "download"],
+)
+def test_transfer_uses_system_direct_limit(
+    tools, name, remote_args, local_args, other_args
+):
+    """upload and download set pyfirecrest's limit for direct transfers to the one
+    that FirecREST reports for the system."""
+    call(tools, name, remote_args, local_args, other_args)
+    assert tools.client.MAX_DIRECT_UPLOAD_SIZE == 33554432
 
 
 def submit(tools, script, **job_options):
