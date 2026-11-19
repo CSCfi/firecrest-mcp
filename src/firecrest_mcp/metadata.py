@@ -8,6 +8,9 @@ from packaging.version import Version
 
 logger = logging.getLogger(__name__)
 
+# The distribution name in pyproject.toml.
+PACKAGE_NAME = "firecrest-mcp"
+
 
 class ServerMetadata(NamedTuple):
     local_version: Version
@@ -16,16 +19,12 @@ class ServerMetadata(NamedTuple):
     github_url: str | None
 
 
-def _get_pkg_name() -> str:
-    return __name__.split(".")[0]
-
-
 def _get_local_version() -> Version:
-    return Version(version(_get_pkg_name()))
+    return Version(version(PACKAGE_NAME))
 
 
 def _get_github_url() -> str | None:
-    pkg_metadata = metadata(_get_pkg_name()).json
+    pkg_metadata = metadata(PACKAGE_NAME).json
 
     project_urls = pkg_metadata.get("project_url")
     if not project_urls:
