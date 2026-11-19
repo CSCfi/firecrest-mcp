@@ -10,11 +10,10 @@ from pathlib import Path
 from fastmcp import FastMCP
 from fastmcp.decorators import get_fastmcp_meta
 from firecrest.v2 import Firecrest
-from packaging.version import Version
 
 from firecrest_mcp.auth import TokenAuth
 from firecrest_mcp.config import active_config, cluster_name
-from firecrest_mcp.metadata import get_server_metadata
+from firecrest_mcp.metadata import get_server_metadata, get_update_message
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
@@ -40,19 +39,6 @@ if not url:
     raise RuntimeError("Environment variable FIRECREST_URL is not defined.")
 
 fc = FirecrestClientWrapper(url)
-
-
-def get_update_message(
-    local_version: Version, upstream_version: Version | None
-) -> str | None:
-    if upstream_version is None:
-        return
-    if local_version < upstream_version:
-        return (
-            "A newer version of FirecREST MCP is available. "
-            "It is recommended to upgrade the package. "
-            f"({local_version} -> {upstream_version})"
-        )
 
 
 local_version, upstream_version, website_url = get_server_metadata()

@@ -69,3 +69,19 @@ def get_server_metadata() -> tuple[Version, Version | None, str | None]:
         logger.debug("Project has no GitHub URL.")
 
     return local_version, upstream_version, github_url
+
+
+def get_update_message(
+    local_version: Version, upstream_version: Version | None
+) -> str | None:
+    """Return a hint to upgrade when the upstream version is newer than the local
+    one, and None otherwise.
+    """
+    if upstream_version is None:
+        return
+    if local_version < upstream_version:
+        return (
+            "A newer version of FirecREST MCP is available. "
+            "It is recommended to upgrade the package. "
+            f"({local_version} -> {upstream_version})"
+        )
