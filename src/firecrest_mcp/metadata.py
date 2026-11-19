@@ -1,3 +1,5 @@
+"""The server's version and URL, and a check for a newer release on GitHub."""
+
 import logging
 from importlib.metadata import metadata, version
 from typing import NamedTuple
@@ -62,6 +64,11 @@ def _get_upstream_version(github_url: str) -> Version:
 
 
 def get_server_metadata() -> ServerMetadata:
+    """Return the installed version, the GitHub URL and the latest release on GitHub.
+
+    It requests the latest release from the GitHub API when the project metadata
+    has a GitHub URL. A failed request is logged and gives no upstream version.
+    """
     local_version = _get_local_version()
 
     upstream_version = None
