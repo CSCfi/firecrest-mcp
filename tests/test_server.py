@@ -2,14 +2,23 @@
 
 import asyncio
 import importlib
+from unittest.mock import Mock
 
 import pytest
+import requests
 from fastmcp.decorators import get_fastmcp_meta
 
-from firecrest_mcp import main
+from firecrest_mcp import main, metadata
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
+
+
+@pytest.fixture(autouse=True)
+def no_github_request(monkeypatch):
+    """Make the update check fail without a request when a test imports server.py."""
+    get = Mock(side_effect=requests.ConnectionError("no requests in tests"))
+    monkeypatch.setattr(metadata.requests, "get", get)
 
 
 def test_registered_tools(monkeypatch):
