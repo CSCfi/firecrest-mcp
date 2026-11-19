@@ -32,10 +32,14 @@ def _get_github_url() -> str | None:
         logger.debug("Project metadata contains no URLs.")
         return
 
-    for url in project_urls:
-        key, value = url.split(", ")
-        if key.lower() == "github":
-            return value
+    # Each entry is "label, URL". Splitting at the first comma keeps a URL that
+    # contains a comma whole.
+    for entry in project_urls:
+        label, _, url = entry.partition(",")
+        label = label.strip()
+        url = url.strip()
+        if label.lower() == "github" and url:
+            return url
 
 
 def _get_upstream_version(github_url: str) -> Version:
