@@ -3,6 +3,7 @@ FirecREST.
 """
 
 import argparse
+import logging
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -29,18 +30,29 @@ def main(argv: list[str] | None = None) -> None:
         help="host name that clients may send in the Host header over HTTP, besides "
         "127.0.0.1, localhost, ::1 and the --host address (may be repeated)",
     )
+    parser.add_argument(
+        "--log",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default="WARNING",
+    )
     args = parser.parse_args(argv)
+
     if args.transport == "stdio" and (
         args.host is not None or args.port is not None or args.allowed_host
     ):
         parser.error("--host, --port and --allowed-host need --transport http")
+
+    numeric_level = getattr(logging, args.log.upper(), None)
+    if not isinstance(numeric_level, int):
+        raise TypeError(f"Invalid log level: {args.log}")
+    logging.basicConfig(level=numeric_level)
 
     # Imported here because server.py needs FIRECREST_URL, and --help and option
     # errors should work without it.
     from firecrest_mcp.server import mcp
 
     if args.transport == "stdio":
-        mcp.run(transport="stdio")
+        mcp.run(transport="stdio", show_banner=False)
         return
     # The Host check stops a web page in the user's browser from reaching the server
     # through DNS rebinding.
@@ -50,4 +62,5 @@ def main(argv: list[str] | None = None) -> None:
         port=DEFAULT_PORT if args.port is None else args.port,
         host_origin_protection=True,
         allowed_hosts=args.allowed_host,
+        show_banner=False,
     )

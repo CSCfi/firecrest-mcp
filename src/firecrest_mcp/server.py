@@ -2,7 +2,9 @@
 FIRECREST_URL.
 """
 
+import logging
 import os
+import sys
 from pathlib import Path
 
 from fastmcp import FastMCP
@@ -11,9 +13,13 @@ from firecrest.v2 import Firecrest
 
 from firecrest_mcp.auth import TokenAuth
 from firecrest_mcp.config import active_config, cluster_name
+from firecrest_mcp.metadata import get_server_metadata, get_update_message
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
+
+logger = logging.getLogger(__name__)
+logging.basicConfig()
 
 
 class FirecrestClientWrapper(
@@ -34,6 +40,14 @@ if not url:
 
 fc = FirecrestClientWrapper(url)
 
+
+server_metadata = get_server_metadata()
+update_message = get_update_message(
+    server_metadata.local_version, server_metadata.upstream_version
+)
+if update_message:
+    print(update_message, file=sys.stderr)
+
 # Rules for the agent that every server sends, outside context/ because every file
 # there is a cluster's.
 GROUND_RULES = Path(__file__).parent / "ground_rules.md"
@@ -42,14 +56,26 @@ CONTEXT_DIR = Path(__file__).parent / "context"
 
 def instructions_for(cluster: str) -> str:
     """Returns the ground rules, followed by context/<cluster>.md if there is one."""
-    parts = [GROUND_RULES]
+    parts = []
+
+    if update_message:
+        parts.append(update_message)
+
+    parts.append(GROUND_RULES.read_text())
+
     context_file = CONTEXT_DIR / f"{cluster}.md"
     if context_file.exists():
-        parts.append(context_file)
-    return "\n".join(part.read_text() for part in parts)
+        parts.append(context_file.read_text())
+
+    return "\n".join(parts)
 
 
-mcp = FastMCP("FirecREST v2", instructions=instructions_for(cluster_name()))
+mcp = FastMCP(
+    "FirecREST v2",
+    version=str(server_metadata.local_version),
+    website_url=server_metadata.github_url,
+    instructions=instructions_for(cluster_name()),
+)
 
 # Only the public methods with @tool() are tools, as in FastMCP's own discovery of
 # tools in a module.
