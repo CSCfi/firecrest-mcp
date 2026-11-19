@@ -34,19 +34,15 @@ def _get_upstream_version(github_url: str) -> Version:
     github_path = urlsplit(github_url).path
     owner, repo = github_path.removeprefix("/").removesuffix(".git").split("/")
 
-    try:
-        response = requests.get(
-            f"https://api.github.com/repos/{owner}/{repo}/releases/latest",
-            headers={
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2026-03-10",
-            },
-            timeout=5,
-        )
-        response.raise_for_status()
-    except requests.RequestException:
-        logger.debug("Could not fetch latest release information from upstream.")
-        raise
+    response = requests.get(
+        f"https://api.github.com/repos/{owner}/{repo}/releases/latest",
+        headers={
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2026-03-10",
+        },
+        timeout=5,
+    )
+    response.raise_for_status()
 
     upstream_tag = response.json()["tag_name"]
 
