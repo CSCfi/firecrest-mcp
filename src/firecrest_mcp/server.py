@@ -41,8 +41,10 @@ if not url:
 fc = FirecrestClientWrapper(url)
 
 
-local_version, upstream_version, website_url = get_server_metadata()
-update_message = get_update_message(local_version, upstream_version)
+server_metadata = get_server_metadata()
+update_message = get_update_message(
+    server_metadata.local_version, server_metadata.upstream_version
+)
 if update_message:
     print(update_message, file=sys.stderr)
 
@@ -70,8 +72,8 @@ def instructions_for(cluster: str) -> str:
 
 mcp = FastMCP(
     "FirecREST v2",
-    version=str(local_version),
-    website_url=website_url,
+    version=str(server_metadata.local_version),
+    website_url=server_metadata.github_url,
     instructions=instructions_for(cluster_name()),
 )
 

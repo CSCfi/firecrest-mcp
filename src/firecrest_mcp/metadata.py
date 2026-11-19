@@ -1,11 +1,19 @@
 import logging
 from importlib.metadata import metadata, version
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 import requests
 from packaging.version import Version
 
 logger = logging.getLogger(__name__)
+
+
+class ServerMetadata(NamedTuple):
+    local_version: Version
+    # None when the project has no GitHub URL or the check failed.
+    upstream_version: Version | None
+    github_url: str | None
 
 
 def _get_pkg_name() -> str:
@@ -50,7 +58,7 @@ def _get_upstream_version(github_url: str) -> Version:
     return Version(upstream_tag)
 
 
-def get_server_metadata() -> tuple[Version, Version | None, str | None]:
+def get_server_metadata() -> ServerMetadata:
     local_version = _get_local_version()
 
     upstream_version = None
@@ -64,7 +72,11 @@ def get_server_metadata() -> tuple[Version, Version | None, str | None]:
     else:
         logger.debug("Project has no GitHub URL.")
 
-    return local_version, upstream_version, github_url
+    return ServerMetadata(
+        local_version=local_version,
+        upstream_version=upstream_version,
+        github_url=github_url,
+    )
 
 
 def get_update_message(
