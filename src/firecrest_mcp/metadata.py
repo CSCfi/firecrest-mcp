@@ -49,6 +49,7 @@ def _get_upstream_version(github_url: str) -> str:
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2026-03-10",
             },
+            timeout=5,
         )
         response.raise_for_status()
     except requests.RequestException:
@@ -73,11 +74,11 @@ def get_server_metadata() -> tuple[str, str | None, str | None]:
     github_url = _get_github_url()
 
     if github_url:
-        upstream_version = _get_upstream_version(github_url)
+        try:
+            upstream_version = _get_upstream_version(github_url)
+        except (requests.RequestException, KeyError, ValueError):
+            logger.debug("Could not check upstream version.", exc_info=True)
     else:
         logger.debug("Project has no GitHub URL.")
-
-    if not upstream_version:
-        logger.debug("Could not check upstream version.")
 
     return local_version, upstream_version, github_url
