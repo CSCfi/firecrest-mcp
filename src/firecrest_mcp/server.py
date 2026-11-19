@@ -42,10 +42,12 @@ if not url:
 fc = FirecrestClientWrapper(url)
 
 
-def get_update_message(local_version: str, upstream_version: str | None) -> str | None:
-    if not upstream_version:
+def get_update_message(
+    local_version: Version, upstream_version: Version | None
+) -> str | None:
+    if upstream_version is None:
         return
-    if Version(local_version) < Version(upstream_version):
+    if local_version < upstream_version:
         return (
             "A newer version of FirecREST MCP is available. "
             "It is recommended to upgrade the package. "

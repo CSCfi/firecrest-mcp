@@ -1,27 +1,19 @@
 import logging
-import re
 from importlib.metadata import metadata, version
 from urllib.parse import urlsplit
 
 import requests
+from packaging.version import Version
 
 logger = logging.getLogger(__name__)
-
-# https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
-SEMVER_RE = (
-    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    + r"(?:-(?P<prerelease>(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)"
-    + r"(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?"
-    + r"(?:\+(?P<buildmetadata>[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$"
-)
 
 
 def _get_pkg_name() -> str:
     return __name__.split(".")[0]
 
 
-def _get_local_version() -> str:
-    return version(_get_pkg_name())
+def _get_local_version() -> Version:
+    return Version(version(_get_pkg_name()))
 
 
 def _get_github_url() -> str | None:
@@ -38,7 +30,7 @@ def _get_github_url() -> str | None:
             return value
 
 
-def _get_upstream_version(github_url: str) -> str:
+def _get_upstream_version(github_url: str) -> Version:
     github_path = urlsplit(github_url).path
     owner, repo = github_path.removeprefix("/").removesuffix(".git").split("/")
 
@@ -58,16 +50,11 @@ def _get_upstream_version(github_url: str) -> str:
 
     upstream_tag = response.json()["tag_name"]
 
-    upstream_semver_match = re.search(SEMVER_RE, upstream_tag.removeprefix("v"))
-    if not upstream_semver_match:
-        raise ValueError(
-            f"Failed to parse SemVer version number from upstream tag '{upstream_tag}'."
-        )
-
-    return upstream_semver_match.group(0)
+    # Raises InvalidVersion, a ValueError, for a tag that isn't a PEP 440 version.
+    return Version(upstream_tag)
 
 
-def get_server_metadata() -> tuple[str, str | None, str | None]:
+def get_server_metadata() -> tuple[Version, Version | None, str | None]:
     local_version = _get_local_version()
 
     upstream_version = None
