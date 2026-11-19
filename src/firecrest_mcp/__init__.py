@@ -4,6 +4,7 @@ FirecREST.
 
 import argparse
 import logging
+import sys
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -47,20 +48,32 @@ def main(argv: list[str] | None = None) -> None:
         raise TypeError(f"Invalid log level: {args.log}")
     logging.basicConfig(level=numeric_level)
 
+    try:
+        run_server(args.transport, args.host, args.port, args.allowed_host)
+    except KeyboardInterrupt:
+        # Ctrl-C stops the server without a traceback. 130 is the shell's exit status
+        # for a process stopped by SIGINT.
+        sys.exit(130)
+
+
+def run_server(
+    transport: str, host: str | None, port: int | None, allowed_hosts: list[str]
+) -> None:
+    """Import the server and run it until it stops."""
     # Imported here because server.py needs FIRECREST_URL, and --help and option
     # errors should work without it.
     from firecrest_mcp.server import mcp
 
-    if args.transport == "stdio":
+    if transport == "stdio":
         mcp.run(transport="stdio", show_banner=False)
         return
     # The Host check stops a web page in the user's browser from reaching the server
     # through DNS rebinding.
     mcp.run(
         transport="http",
-        host=DEFAULT_HOST if args.host is None else args.host,
-        port=DEFAULT_PORT if args.port is None else args.port,
+        host=DEFAULT_HOST if host is None else host,
+        port=DEFAULT_PORT if port is None else port,
         host_origin_protection=True,
-        allowed_hosts=args.allowed_host,
+        allowed_hosts=allowed_hosts,
         show_banner=False,
     )

@@ -113,3 +113,17 @@ def test_main_stdio_rejects_http_options(recorded_runs, options):
     with pytest.raises(SystemExit):
         main(options)
     assert recorded_runs == []
+
+
+def test_main_keyboard_interrupt(monkeypatch):
+    """Ctrl-C while the server runs exits with status 130 and no traceback."""
+    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
+    server = importlib.import_module("firecrest_mcp.server")
+
+    def interrupted_run(**kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(server.mcp, "run", interrupted_run)
+    with pytest.raises(SystemExit) as exit_info:
+        main([])
+    assert exit_info.value.code == 130
