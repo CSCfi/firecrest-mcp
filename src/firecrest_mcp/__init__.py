@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> None:
     from firecrest_mcp.server import mcp
 
     if args.transport == "stdio":
-        mcp.run(transport="stdio")
+        mcp.run(transport="stdio", show_banner=False)
         return
     # The Host check stops a web page in the user's browser from reaching the server
     # through DNS rebinding.
@@ -62,4 +62,5 @@ def main(argv: list[str] | None = None) -> None:
         port=DEFAULT_PORT if args.port is None else args.port,
         host_origin_protection=True,
         allowed_hosts=args.allowed_host,
+        show_banner=False,
     )

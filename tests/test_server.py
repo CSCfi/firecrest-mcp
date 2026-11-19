@@ -71,7 +71,7 @@ def recorded_runs(monkeypatch):
 def test_main_stdio(recorded_runs):
     """Without options, the server runs over stdio."""
     main([])
-    assert recorded_runs == [{"transport": "stdio"}]
+    assert recorded_runs == [{"transport": "stdio", "show_banner": False}]
 
 
 def test_main_http(recorded_runs):
@@ -84,6 +84,7 @@ def test_main_http(recorded_runs):
             "port": 8000,
             "host_origin_protection": True,
             "allowed_hosts": ["a", "b"],
+            "show_banner": False,
         }
     ]
 
