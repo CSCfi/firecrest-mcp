@@ -102,19 +102,6 @@ def test_tag(set_project_urls, github_get, tag, expected):
     assert metadata.get_server_metadata().upstream_version == expected
 
 
-@pytest.mark.parametrize(
-    "error",
-    [requests.ConnectionError("refused"), requests.Timeout("timed out")],
-    ids=["connection error", "timeout"],
-)
-def test_request_error(set_project_urls, github_get, error):
-    """A request that fails gives no upstream version."""
-    set_project_urls(["GitHub, https://github.com/owner/repo"])
-    github_get.side_effect = error
-
-    assert metadata.get_server_metadata().upstream_version is None
-
-
 def http_error_response() -> Mock:
     response = Mock()
     response.raise_for_status.side_effect = requests.HTTPError("403 rate limited")
@@ -134,13 +121,22 @@ def not_json_response() -> Mock:
 
 
 @pytest.mark.parametrize(
-    "response",
-    [http_error_response(), no_tag_response(), not_json_response()],
-    ids=["HTTP error", "no tag_name", "not JSON"],
+    ("error", "response"),
+    [
+        (requests.ConnectionError("refused"), None),
+        (requests.Timeout("timed out"), None),
+        (None, http_error_response()),
+        (None, no_tag_response()),
+        (None, not_json_response()),
+    ],
+    ids=["connection error", "timeout", "HTTP error", "no tag_name", "not JSON"],
 )
-def test_bad_response(set_project_urls, github_get, response):
-    """An HTTP error status or a body without a tag gives no upstream version."""
+def test_failed_request(set_project_urls, github_get, error, response):
+    """A request that raises, an HTTP error status or a body without a tag gives no
+    upstream version."""
     set_project_urls(["GitHub, https://github.com/owner/repo"])
+    # A side_effect of None lets the mock return its return_value.
+    github_get.side_effect = error
     github_get.return_value = response
 
     assert metadata.get_server_metadata().upstream_version is None

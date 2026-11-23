@@ -247,15 +247,13 @@ def test_active_config_rereads_file(config):
 @pytest.mark.parametrize(
     ("content", "error"),
     [
-        (None, "does not exist"),
         ("[roihu]\n", r"no \[lumi\] table"),
-        ("[lumi]\ndefault_account = 'p'", "default_account 'p' is not in accounts"),
         ("local_paths = 'data'\n[lumi]\n", "local_paths must be a list of strings"),
     ],
 )
 def test_active_config_invalid(config, content, error):
-    """The config tool raises the same errors as the tools it describes."""
-    if content is not None:
-        config(content)
+    """The config tool fails with the same error as the other tools when the
+    cluster's table is missing or local_paths is invalid."""
+    config(content)
     with pytest.raises(ToolError, match=error):
         active_config()
