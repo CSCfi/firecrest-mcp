@@ -50,12 +50,12 @@ def test_registered_tools(server):
 
 
 def test_instructions(server):
-    """The instructions start with the ground rules, followed by the cluster's context
-    if it has one."""
-    rules = server.GROUND_RULES.read_text()
+    """The instructions start with the shared context, followed by the cluster's
+    context if it has one."""
+    rules = server.SHARED_CONTEXT.read_text()
     assert rules.startswith("### Ground rules\n")
     assert server.instructions_for("lumi") == "\n".join(
-        [rules, (server.CONTEXT_DIR / "lumi.md").read_text()]
+        [rules, (server.CLUSTER_DIR / "lumi.md").read_text()]
     )
     assert server.instructions_for("hpc") == rules
 
@@ -63,7 +63,7 @@ def test_instructions(server):
 def test_context_headers(server):
     """Each cluster's context starts with a ### header, so that it nests under the
     client's header for the server."""
-    for path in server.CONTEXT_DIR.glob("*.md"):
+    for path in server.CLUSTER_DIR.glob("*.md"):
         assert path.read_text().startswith("### "), path.name
 
 

@@ -44,24 +44,23 @@ update_message = get_update_message(
 if update_message:
     print(update_message, file=sys.stderr)
 
-# Rules for the agent that every server sends, outside context/ because every file
-# there is a cluster's.
-GROUND_RULES = Path(__file__).parent / "ground_rules.md"
 CONTEXT_DIR = Path(__file__).parent / "context"
+SHARED_CONTEXT = CONTEXT_DIR / "shared.md"
+CLUSTER_DIR = CONTEXT_DIR / "clusters"
 
 
 def instructions_for(cluster: str) -> str:
-    """Returns the ground rules, followed by context/<cluster>.md if there is one."""
+    """Returns the shared context, followed by the cluster's context if it exists."""
     parts = []
 
     if update_message:
         parts.append(update_message)
 
-    parts.append(GROUND_RULES.read_text())
+    parts.append(SHARED_CONTEXT.read_text())
 
-    context_file = CONTEXT_DIR / f"{cluster}.md"
-    if context_file.exists():
-        parts.append(context_file.read_text())
+    cluster_file = CLUSTER_DIR / f"{cluster}.md"
+    if cluster_file.exists():
+        parts.append(cluster_file.read_text())
 
     return "\n".join(parts)
 

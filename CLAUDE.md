@@ -41,14 +41,14 @@ One server process serves one cluster, chosen by `FIRECREST_URL`.
   missing, so tests import the mixins (or `auth`) directly with a mock `client` rather
   than importing `server`. Only `tests/test_server.py` imports it, after setting
   `FIRECREST_URL`.
-- **Instructions**: the FastMCP `instructions` are `ground_rules.md`, sent by every
-  server, followed by `context/<cluster>.md` if it exists, where `<cluster>` is
+- **Instructions**: the FastMCP `instructions` are `context/shared.md`, sent by every
+  server, followed by `context/clusters/<cluster>.md` if it exists, where `<cluster>` is
   `cluster_name()`. Each file starts with a `###` header, because Claude Code puts each
-  server's instructions under a `##` header. A context file holds only what the
-  instructions must say: the pointer to the cluster's documentation MCP server, facts
-  that this server's tools or config depend on, and facts that agents get confidently
-  wrong. Anything the documentation server covers, or that only describes the
-  platform, stays out.
+  server's instructions under a `##` header. A cluster's context file holds only what
+  the instructions must say: the pointer to the cluster's documentation MCP server,
+  facts that this server's tools or config depend on, and facts that agents get
+  confidently wrong. Anything the documentation server covers, or that only describes
+  the platform, stays out.
 - **Auth** (`auth.py`, tested in `tests/test_auth.py`): `TokenAuth.get_access_token`
   re-reads the token file on every request (so users can refresh it in place), refuses
   it if group/other permission bits are set, and checks the JWT `exp` without

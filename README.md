@@ -189,12 +189,12 @@ server won't start without it. To adapt the server to another cluster:
   name other than `api`, and uses that name for the cluster's table in the config file.
   For example, `https://api.hpc.example.org/v1` is the cluster `hpc`, with the table
   `[hpc]`.
-- Optionally, add `src/firecrest_mcp/context/<cluster name>.md` (e.g. `hpc.md`) with
-  instructions for the agent, such as where its documentation is and what the agent
+- Optionally, add `src/firecrest_mcp/context/clusters/<cluster name>.md` (e.g. `hpc.md`)
+  with instructions for the agent, such as where its documentation is and what the agent
   should know before it looks there (see `lumi.md`), and reinstall. A file with any
   other name is ignored without a warning. Start the file with a `###` header naming
-  the cluster. The server sends it after its ground rules for all clusters, in
-  `src/firecrest_mcp/ground_rules.md`.
+  the cluster. The server sends it after its shared context for all clusters, in
+  `src/firecrest_mcp/context/shared.md`.
 - If a directory has two names, as `/project` and `/projappl` do on LUMI, add it to
   `PATH_ALIASES` in `src/firecrest_mcp/config.py`.
 
