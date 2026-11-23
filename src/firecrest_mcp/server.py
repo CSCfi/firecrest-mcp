@@ -2,7 +2,6 @@
 FIRECREST_URL.
 """
 
-import logging
 import os
 import sys
 from pathlib import Path
@@ -17,9 +16,6 @@ from firecrest_mcp.metadata import get_server_metadata, get_update_message
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
-
-logger = logging.getLogger(__name__)
-logging.basicConfig()
 
 
 class FirecrestClientWrapper(

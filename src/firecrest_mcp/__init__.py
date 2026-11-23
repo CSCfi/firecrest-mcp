@@ -32,7 +32,8 @@ def main(argv: list[str] | None = None) -> None:
         "127.0.0.1, localhost, ::1 and the --host address (may be repeated)",
     )
     parser.add_argument(
-        "--log",
+        "--log-level",
+        type=str.upper,
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         default="WARNING",
     )
@@ -43,10 +44,7 @@ def main(argv: list[str] | None = None) -> None:
     ):
         parser.error("--host, --port and --allowed-host need --transport http")
 
-    numeric_level = getattr(logging, args.log.upper(), None)
-    if not isinstance(numeric_level, int):
-        raise TypeError(f"Invalid log level: {args.log}")
-    logging.basicConfig(level=numeric_level)
+    logging.basicConfig(level=args.log_level)
 
     try:
         run_server(args.transport, args.host, args.port, args.allowed_host)
