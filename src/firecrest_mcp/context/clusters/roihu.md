@@ -14,6 +14,11 @@ partitions on x86_64 and `gpu` runs the GPU partitions on aarch64. Submit each j
 the system that matches its partition, and build software, including Python
 environments and containers with native code, on the side where it will run.
 
+The `submit` tool sends jobs through FirecREST. In such jobs, modules work properly
+only if the script starts with `#!/bin/bash -l` and the job has
+`CSC_ENV_INIT_NON_INTERACTIVE=yes`. Pass the latter in the `env_vars` argument of
+`submit`.
+
 Every node has local NVMe storage in `$TMPDIR` without `--gres=nvme`, and
 `$LOCAL_SCRATCH` is not a replacement for it. Lustre is shared by all users and suffers
 under many small files, so stage such data in `$TMPDIR` and copy the results back
