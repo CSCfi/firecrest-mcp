@@ -81,6 +81,23 @@ def test_other_special_characters_allowed(config):
     check_remote_paths('/scratch/project_1/a b "c" $(d) ;&|')
 
 
+# pytest.raises fails with pytest.fail.Exception when nothing is raised. raises=
+# makes any other error, such as a NameError, fail the suite.
+@pytest.mark.xfail(
+    strict=True, raises=pytest.fail.Exception, reason="only single quotes are refused"
+)
+@pytest.mark.parametrize(
+    "char", [" ", '"', "\\", ";", "&", "|", "<", ">", "(", ")", "$", "`"]
+)
+def test_shell_characters_rejected(config, char):
+    """Shell characters are refused, because FirecREST releases up to 2.6.2 put the
+    path of a large download into a transfer job script without quotes, and that of a
+    large upload in double quotes."""
+    config()
+    with pytest.raises(ToolError, match="must not contain"):
+        check_remote_paths(f"/scratch/project_1/a{char}b")
+
+
 @pytest.mark.parametrize(
     ("remote_paths", "path"),
     [

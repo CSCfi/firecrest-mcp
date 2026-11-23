@@ -1,6 +1,7 @@
 """Tests for reading the config file and its account, group and local path
 checks."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -189,6 +190,65 @@ def test_local_protected(config, path):
     config('local_paths = ["."]\n[lumi]\n')
     with pytest.raises(ToolError, match="is protected"):
         load_config().check_local_paths(path)
+
+
+# pytest.raises fails with pytest.fail.Exception when nothing is raised. raises=
+# makes any other error, such as a NameError, fail the suite.
+@pytest.mark.xfail(
+    strict=True,
+    raises=pytest.fail.Exception,
+    reason="protected files are compared by path",
+)
+@pytest.mark.parametrize("protected", ["token", ".firecrest-mcp.toml"])
+def test_local_hard_link_to_protected_file(local, tmp_path, protected):
+    """A hard link below local_paths to a protected file is refused, because it is
+    the same file under another name."""
+    (tmp_path / "token").write_text("token")
+    (tmp_path / "data" / "link").hardlink_to(tmp_path / protected)
+    with pytest.raises(ToolError, match="is protected"):
+        load_config().check_local_paths("data/link")
+
+
+def is_case_insensitive(directory: Path) -> bool:
+    """Return whether the file system of a directory ignores the case of names."""
+    probe = directory / "probe"
+    probe.write_text("")
+    insensitive = (directory / "PROBE").exists()
+    probe.unlink()
+    return insensitive
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=pytest.fail.Exception,
+    reason="protected paths are compared case-sensitively",
+)
+def test_local_protected_in_other_case(config, tmp_path):
+    """On a file system that ignores case, such as macOS's default, another spelling
+    of a protected file is the same file and is refused."""
+    if not is_case_insensitive(tmp_path):
+        pytest.skip("the file system is case-sensitive")
+    config('local_paths = ["."]\n[lumi]\n')
+    with pytest.raises(ToolError, match="is protected"):
+        load_config().check_local_paths(".FIRECREST-MCP.TOML")
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=pytest.fail.Exception,
+    reason="local_paths entries are resolved through links",
+)
+@pytest.mark.parametrize("entry", ["work", "work/sub"])
+def test_local_entry_with_symlink_refused(config, tmp_path, entry):
+    """An entry with a symlink in its path is refused, and the error names the real
+    path to list instead. Otherwise an agent could replace the link with one to
+    another directory."""
+    config(f'local_paths = ["{entry}"]\n[lumi]\n')
+    (tmp_path / "elsewhere" / "sub").mkdir(parents=True)
+    (tmp_path / "work").symlink_to(tmp_path / "elsewhere")
+    real_path = (tmp_path / entry).resolve()
+    with pytest.raises(ToolError, match=re.escape(str(real_path))):
+        load_config().check_local_paths(f"{entry}/x")
 
 
 def test_local_missing_key_denies_everything(config):
