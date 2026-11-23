@@ -68,6 +68,12 @@ TOOLS_RESTRICTED = [
     ("download", ["source_path"], ["target_path"], {}),
     ("submit", ["working_dir", "script_remote_path"], [], {}),
     ("submit", ["working_dir"], ["script_local_path"], {}),
+    (
+        "attach_to_job",
+        ["output_path"],
+        [],
+        {"jobid": MOCK_OWN_JOB["jobId"], "command": "hostname"},
+    ),
 ]
 
 # Tools with no argument that the config restricts, with the same fields as
@@ -80,7 +86,6 @@ TOOLS_NOT_RESTRICTED = [
     ("job_info", [], [], {}),
     ("job_metadata", [], [], {"jobid": MOCK_OWN_JOB["jobId"]}),
     ("cancel_job", [], [], {"jobid": MOCK_OWN_JOB["jobId"]}),
-    ("attach_to_job", [], [], {"jobid": MOCK_OWN_JOB["jobId"], "command": "hostname"}),
 ]
 
 # Every tool. submit is listed twice, once for each kind of script path.
@@ -251,7 +256,10 @@ def test_system_name_pattern(tools, name, arguments):
         ("job_info", {}),
         ("job_metadata", {}),
         ("cancel_job", {}),
-        ("attach_to_job", {"command": "hostname"}),
+        (
+            "attach_to_job",
+            {"command": "hostname", "output_path": ALLOWED_REMOTE_PATH},
+        ),
     ],
 )
 @pytest.mark.parametrize("jobid", ["../1", "1?x=", "1,2"])

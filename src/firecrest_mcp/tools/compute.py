@@ -1,10 +1,13 @@
 """Tools for Slurm jobs: submitting, querying, cancelling and attaching to them."""
 
+import re
+import shlex
 from typing import Annotated
 
 import cachetools.func
 from fastmcp.exceptions import ToolError
 from fastmcp.tools import tool
+from firecrest import UnexpectedStatusException
 from firecrest.v2 import Firecrest
 
 from firecrest_mcp.config import check_local_paths, load_cluster_config
@@ -164,8 +167,58 @@ class FirecrestComputeToolsMixin:
         self,
         system_name: SystemName,
         jobid: JobId,
-        command: Annotated[str, "the command to be executed"],
+        command: Annotated[str, "the command to run, which bash runs in the job"],
+        output_path: Annotated[
+            str,
+            "the file on the system that gets the command's output and errors. It is"
+            " overwritten.",
+        ],
     ) -> dict:
-        """Run a command inside one of your running jobs."""
+        """Run a command inside one of your running jobs, with its output written to
+        output_path. The command gets srun's default resources, such as one CPU, not
+        the job's. FirecREST kills it after the time limit that the systems tool
+        shows as ssh.timeout.commandExecution.
+        """
+        load_cluster_config().check_remote_paths(output_path)
         check_own_job(self.client, system_name, jobid)
-        return self.client.attach_to_job(system_name, jobid=jobid, command=command)
+        # FirecREST runs "srun ... <command>" in a login node shell, which would run
+        # anything after a ";" itself. bash -c keeps the whole command in the job.
+        # srun forwards its stdin to the job, so a command that reads stdin gets
+        # /dev/null and not the SSH session's stdin.
+        shell_line = (
+            f"bash -c {shlex.quote(command)} > {shlex.quote(output_path)} 2>&1"
+            " < /dev/null"
+        )
+        try:
+            self.client.attach_to_job(system_name, jobid=jobid, command=shell_line)
+        except UnexpectedStatusException as error:
+            return attach_error_result(error, output_path)
+        return {"output_path": output_path, "status": "finished", "exit_status": 0}
+
+
+def attach_error_result(error: UnexpectedStatusException, output_path: str) -> dict:
+    """Return the result of an attached command that timed out or exited with an
+    error, whose output is in output_path. Re-raise any other error."""
+    response = error.responses[-1]
+    if response.status_code == 504:
+        return {
+            "output_path": output_path,
+            "status": "killed",
+            "note": "The command ran longer than FirecREST's time limit and was"
+            " killed. Submit longer work as a job.",
+        }
+    # FirecREST reports a nonzero exit as a 500 error with "exit_status:<N>" in its
+    # message.
+    if response.status_code == 500:
+        try:
+            message = response.json().get("message", "")
+        except ValueError:
+            message = ""
+        match = re.search(r"exit_status:(\d+)", message)
+        if match:
+            return {
+                "output_path": output_path,
+                "status": "finished",
+                "exit_status": int(match.group(1)),
+            }
+    raise error
