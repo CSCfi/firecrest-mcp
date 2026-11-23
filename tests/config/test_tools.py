@@ -109,6 +109,9 @@ def restricted_tool(name):
     raise ValueError(f"{name} is not in TOOLS_RESTRICTED")
 
 
+TRANSFER_TOOLS = [restricted_tool("upload"), restricted_tool("download")]
+
+
 # The tools with a mock FirecREST client, so no real system is contacted. The mock
 # has the client's signatures, so a call with a wrong argument name fails. Its
 # methods return the values in MOCK_CLIENT_RESULTS.
@@ -203,29 +206,17 @@ def test_every_tool_is_listed():
 
 
 @pytest.mark.parametrize(
-    ("name", "remote_args", "local_args", "other_args"),
-    TOOLS_RESTRICTED,
-    ids=ids(TOOLS_RESTRICTED),
-)
-def test_tool_with_allowed_arguments_calls_client(
-    tools, name, remote_args, local_args, other_args
-):
-    """Each tool calls the client when its arguments are allowed."""
-    call(tools, name, remote_args, local_args, other_args)
-    client_method(tools, name).assert_called_once()
-
-
-@pytest.mark.parametrize(
     ("name", "remote_args", "local_args", "other_args"), ALL_TOOLS, ids=ids(ALL_TOOLS)
 )
 def test_tool_works_through_fastmcp(tools, name, remote_args, local_args, other_args):
-    """Each tool can be called through FastMCP with its default arguments without an
-    error."""
+    """Each tool works when an agent calls it through FastMCP with arguments that
+    the default config allows."""
     arguments = arguments_with_default_paths(remote_args, local_args, other_args)
     # systems is the only tool without a system_name.
     if name != "systems":
         arguments["system_name"] = "lumi"
     call_through_mcp(tools, name, arguments)
+    client_method(tools, name).assert_called_once()
 
 
 # A system name with which pyfirecrest's userinfo requests the URL of the view
@@ -386,11 +377,8 @@ def test_transfer_returns_only_the_job(tools, name, transfer, arguments):
 
 @pytest.mark.parametrize(
     ("name", "remote_args", "local_args", "other_args"),
-    [
-        ("upload", ["directory"], ["local_file"], {"filename": "f"}),
-        ("download", ["source_path"], ["target_path"], {}),
-    ],
-    ids=["upload", "download"],
+    TRANSFER_TOOLS,
+    ids=ids(TRANSFER_TOOLS),
 )
 def test_transfer_waits_for_the_data(tools, name, remote_args, local_args, other_args):
     """upload and download always wait for the transfer job, because only then is the
@@ -407,11 +395,8 @@ def test_transfer_waits_for_the_data(tools, name, remote_args, local_args, other
 
 @pytest.mark.parametrize(
     ("name", "remote_args", "local_args", "other_args"),
-    [
-        ("upload", ["directory"], ["local_file"], {"filename": "f"}),
-        ("download", ["source_path"], ["target_path"], {}),
-    ],
-    ids=["upload", "download"],
+    TRANSFER_TOOLS,
+    ids=ids(TRANSFER_TOOLS),
 )
 def test_transfer_uses_system_direct_limit(
     tools, name, remote_args, local_args, other_args

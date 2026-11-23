@@ -21,10 +21,6 @@ class ServerMetadata(NamedTuple):
     github_url: str | None
 
 
-def _get_local_version() -> Version:
-    return Version(version(PACKAGE_NAME))
-
-
 def _get_github_url() -> str | None:
     pkg_metadata = metadata(PACKAGE_NAME).json
 
@@ -69,7 +65,7 @@ def get_server_metadata() -> ServerMetadata:
     It requests the latest release from the GitHub API when the project metadata
     has a GitHub URL. A failed request is logged and gives no upstream version.
     """
-    local_version = _get_local_version()
+    local_version = Version(version(PACKAGE_NAME))
 
     upstream_version = None
     github_url = _get_github_url()

@@ -21,7 +21,14 @@ def no_github_request(monkeypatch):
     monkeypatch.setattr(metadata.requests, "get", get)
 
 
-def test_registered_tools(monkeypatch):
+@pytest.fixture
+def server(monkeypatch):
+    """The server module, imported with the FIRECREST_URL that server.py needs."""
+    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
+    return importlib.import_module("firecrest_mcp.server")
+
+
+def test_registered_tools(server):
     """The server registers every tool of the three mixins, the config tool and
     nothing else. The list of the mixins' tools is tested in
     tests/config/test_tools.py."""
@@ -38,18 +45,13 @@ def test_registered_tools(monkeypatch):
                 continue
             if get_fastmcp_meta(getattr(mixin, name)) is not None:
                 expected.add(name)
-    # server.py reads FIRECREST_URL when it is imported.
-    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
-    server = importlib.import_module("firecrest_mcp.server")
     tools = asyncio.run(server.mcp.list_tools())
     assert {tool.name for tool in tools} == expected | {"config"}
 
 
-def test_instructions(monkeypatch):
+def test_instructions(server):
     """The instructions start with the ground rules, followed by the cluster's context
     if it has one."""
-    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
-    server = importlib.import_module("firecrest_mcp.server")
     rules = server.GROUND_RULES.read_text()
     assert rules.startswith("### Ground rules\n")
     assert server.instructions_for("lumi") == "\n".join(
@@ -58,20 +60,16 @@ def test_instructions(monkeypatch):
     assert server.instructions_for("hpc") == rules
 
 
-def test_context_headers(monkeypatch):
+def test_context_headers(server):
     """Each cluster's context starts with a ### header, so that it nests under the
     client's header for the server."""
-    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
-    server = importlib.import_module("firecrest_mcp.server")
     for path in server.CONTEXT_DIR.glob("*.md"):
         assert path.read_text().startswith("### "), path.name
 
 
 @pytest.fixture
-def recorded_runs(monkeypatch):
+def recorded_runs(server, monkeypatch):
     """Replaces mcp.run of the server and returns the keyword arguments of each call."""
-    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
-    server = importlib.import_module("firecrest_mcp.server")
     calls = []
     monkeypatch.setattr(server.mcp, "run", lambda **kwargs: calls.append(kwargs))
     return calls
@@ -115,10 +113,8 @@ def test_main_stdio_rejects_http_options(recorded_runs, options):
     assert recorded_runs == []
 
 
-def test_main_keyboard_interrupt(monkeypatch):
+def test_main_keyboard_interrupt(server, monkeypatch):
     """Ctrl-C while the server runs exits with status 130 and no traceback."""
-    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
-    server = importlib.import_module("firecrest_mcp.server")
 
     def interrupted_run(**kwargs):
         raise KeyboardInterrupt
