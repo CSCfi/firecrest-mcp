@@ -65,8 +65,8 @@ class FirecrestFilesystemToolsMixin:
         first_lines: Annotated[int | None, "return only the first N lines"] = None,
         last_lines: Annotated[int | None, "return only the last N lines"] = None,
     ) -> str:
-        """Read a text file: the whole file (up to 5 MB), or only its first or last
-        lines.
+        """Read a text file: the whole file, up to the system's max_ops_file_size from
+        the systems tool, or only its first or last lines.
         """
         load_config().check_remote_paths(path)
         if first_lines is not None and last_lines is not None:
