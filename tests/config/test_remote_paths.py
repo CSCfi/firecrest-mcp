@@ -75,17 +75,12 @@ def test_dots_inside_names_allowed(config):
 
 
 def test_other_special_characters_allowed(config):
-    """Spaces, double quotes and other shell characters stay inside FirecREST's
-    single quotes, so they are allowed."""
+    """Characters such as "*", "#" and "{" don't run commands in FirecREST's transfer
+    job scripts, so they are allowed."""
     config()
-    check_remote_paths('/scratch/project_1/a b "c" $(d) ;&|')
+    check_remote_paths("/scratch/project_1/a*b#c{d}e[f]g?h!i%j+k,l=m@n")
 
 
-# pytest.raises fails with pytest.fail.Exception when nothing is raised. raises=
-# makes any other error, such as a NameError, fail the suite.
-@pytest.mark.xfail(
-    strict=True, raises=pytest.fail.Exception, reason="only single quotes are refused"
-)
 @pytest.mark.parametrize(
     "char", [" ", '"', "\\", ";", "&", "|", "<", ">", "(", ")", "$", "`"]
 )

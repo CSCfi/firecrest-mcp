@@ -77,6 +77,13 @@ def _check_remote_syntax(path: str) -> str:
     # them, so a quote would end the path and run the rest as commands.
     if "'" in path or any(not char.isprintable() for char in path):
         raise ValueError(f"{path!r} must not contain quotes or control characters")
+    # FirecREST releases up to 2.6.2 put the path of a large download into a transfer
+    # job script without quotes, and that of a large upload in double quotes. There,
+    # these characters could end the path and run the rest as commands.
+    if any(char in ' "\\;&|<>()$`' for char in path):
+        raise ValueError(
+            f'{path!r} must not contain spaces or any of the characters "\\;&|<>()$`'
+        )
     return path
 
 

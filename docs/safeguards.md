@@ -89,6 +89,10 @@ All file, transfer and job tools that take a path on the cluster check it:
 - The path must be absolute and must not contain a `..` component, a single quote or a
   control character. FirecREST puts paths into shell commands in single quotes, so a
   quote would end the path.
+- The path must not contain a space or any of `"\;&|<>()$` and the backtick. FirecREST
+  releases up to 2.6.2 put the path of a large download into a transfer job script
+  without quotes, and that of a large upload in double quotes, where these characters
+  could run commands.
 - The path must be an entry of `remote_paths` or lie below one, compared by whole
   components and without wildcards, as local paths are.
 - LUMI's `/project` and `/projappl` count as the same directory, so either name in the
