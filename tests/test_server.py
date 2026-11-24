@@ -29,7 +29,7 @@ def server(monkeypatch):
 
 
 def test_registered_tools(server):
-    """The server registers every tool of the three mixins, the config tool and
+    """The server registers every tool of the three mixins, show_config and
     nothing else. The list of the mixins' tools is tested in
     tests/config/test_tools.py."""
     mixins = [
@@ -46,7 +46,7 @@ def test_registered_tools(server):
             if get_fastmcp_meta(getattr(mixin, name)) is not None:
                 expected.add(name)
     tools = asyncio.run(server.mcp.list_tools())
-    assert {tool.name for tool in tools} == expected | {"config"}
+    assert {tool.name for tool in tools} == expected | {"show_config"}
 
 
 def test_instructions(server):

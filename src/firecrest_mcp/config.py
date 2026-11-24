@@ -261,13 +261,3 @@ def check_local_paths(*paths: str | os.PathLike | None) -> None:
             raise ToolError(f"Local path {str(path)!r} is protected.")
         if not any(resolved.is_relative_to(d) for d in allowed):
             raise _not_allowed("Local path", str(path), "local_paths")
-
-
-def active_config() -> dict:
-    """Return the settings from .firecrest-mcp.toml that apply to this server:
-    local_paths and this cluster's table. A key that is missing from the file is shown
-    as [] or null and allows nothing. The file is read on every call."""
-    return {
-        "local_paths": _local_path_entries(),
-        cluster_name(): load_cluster_config().model_dump(),
-    }

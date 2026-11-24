@@ -1,6 +1,6 @@
 """Tests for the tools with a mock client: that every tool checks its arguments, that
 every tool works when it is called through FastMCP, and the behaviour of submit,
-read_file, chgrp, upload and download.
+read_file, chgrp, upload, download and show_config.
 """
 
 import asyncio
@@ -11,6 +11,7 @@ from fastmcp.decorators import get_fastmcp_meta
 from fastmcp.exceptions import ToolError
 from firecrest.v2 import ExternalDownload, ExternalUpload
 
+from firecrest_mcp.tools.clientless import show_config
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
@@ -559,3 +560,43 @@ def test_chmod_mode_must_be_numeric(tools, mode):
     with pytest.raises(ToolError, match="is not a numeric mode"):
         tools.chmod("lumi", ALLOWED_REMOTE_PATH, mode)
     tools.client.chmod.assert_not_called()
+
+
+def test_show_config(config):
+    """show_config returns local_paths and this cluster's table with every key."""
+    config('local_paths = ["data"]\n[lumi]\naccounts = ["p"]\n[roihu]\n')
+    assert show_config() == {
+        "local_paths": ["data"],
+        "lumi": {
+            "remote_paths": [],
+            "accounts": ["p"],
+            "default_account": None,
+            "partitions": [],
+            "default_partition": None,
+            "reservations": [],
+            "groups": [],
+        },
+    }
+
+
+def test_show_config_rereads_file(config):
+    """show_config shows edits without a restart."""
+    config("[lumi]\n")
+    assert show_config()["lumi"]["accounts"] == []
+    config('[lumi]\naccounts = ["p"]\n')
+    assert show_config()["lumi"]["accounts"] == ["p"]
+
+
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        ("[roihu]\n", r"no \[lumi\] table"),
+        ("local_paths = 'data'\n[lumi]\n", "local_paths must be a list of strings"),
+    ],
+)
+def test_show_config_invalid(config, content, error):
+    """show_config fails with the same error as the other tools when the
+    cluster's table is missing or local_paths is invalid."""
+    config(content)
+    with pytest.raises(ToolError, match=error):
+        show_config()

@@ -1,5 +1,5 @@
-"""Tests for reading the config file, its account, group and local path checks,
-and the config tool."""
+"""Tests for reading the config file and its account, group and local path
+checks."""
 
 from pathlib import Path
 
@@ -7,7 +7,6 @@ import pytest
 from fastmcp.exceptions import ToolError
 
 from firecrest_mcp.config import (
-    active_config,
     check_local_paths,
     cluster_name,
     load_cluster_config,
@@ -216,44 +215,3 @@ def test_local_paths_empty_entry(config):
     config('local_paths = ["data", ""]\n')
     with pytest.raises(ToolError, match="must not contain an empty string"):
         check_local_paths("data")
-
-
-def test_active_config(config):
-    """The config tool returns local_paths and this cluster's table with every
-    key."""
-    config('local_paths = ["data"]\n[lumi]\naccounts = ["p"]\n[roihu]\n')
-    assert active_config() == {
-        "local_paths": ["data"],
-        "lumi": {
-            "remote_paths": [],
-            "accounts": ["p"],
-            "default_account": None,
-            "partitions": [],
-            "default_partition": None,
-            "reservations": [],
-            "groups": [],
-        },
-    }
-
-
-def test_active_config_rereads_file(config):
-    """The config tool shows edits without a restart."""
-    config("[lumi]\n")
-    assert active_config()["lumi"]["accounts"] == []
-    config('[lumi]\naccounts = ["p"]\n')
-    assert active_config()["lumi"]["accounts"] == ["p"]
-
-
-@pytest.mark.parametrize(
-    ("content", "error"),
-    [
-        ("[roihu]\n", r"no \[lumi\] table"),
-        ("local_paths = 'data'\n[lumi]\n", "local_paths must be a list of strings"),
-    ],
-)
-def test_active_config_invalid(config, content, error):
-    """The config tool fails with the same error as the other tools when the
-    cluster's table is missing or local_paths is invalid."""
-    config(content)
-    with pytest.raises(ToolError, match=error):
-        active_config()

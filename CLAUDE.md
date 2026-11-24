@@ -25,10 +25,11 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
 (`firecrest.v2.Firecrest`) to expose HPC file and Slurm operations on CSC systems.
 One server process serves one cluster, chosen by `FIRECREST_URL`.
 
-- **Tool registration** (`server.py`): tools are `@tool()` methods on the mixins in
-  `tools/`, which `FirecrestClientWrapper` combines. `server.py` registers every public
-  `@tool()` method of the wrapper. It also registers `active_config()` from `config.py`
-  as the `config` tool, which doesn't call FirecREST.
+- **Tool registration** (`server.py`): tools that call FirecREST are `@tool()` methods
+  on the mixins in `tools/`, which `FirecrestClientWrapper` combines. Tools that don't,
+  such as `show_config`, are `@tool()` functions in `tools/clientless.py`. `server.py`
+  registers every public `@tool()` method of the wrapper, and each of those functions
+  by name.
 - **Tests through FastMCP**: most tool tests call the mixin methods directly, which
   skips FastMCP's checks of the arguments, such as the patterns in `tools/params.py`,
   and its conversion of the result. Use `call_through_mcp` in
