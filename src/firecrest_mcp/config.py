@@ -98,6 +98,48 @@ def cluster_name() -> str:
     return labels[0]
 
 
+def _real_entry(entry: str) -> Path:
+    """Return a local_paths entry as an absolute path with "~" expanded.
+
+    Raises a ToolError if the entry's path contains a symlink, because changing
+    the link would change which directory local_paths allows.
+    """
+    # The working directory is resolved first, so that only a link in the entry itself
+    # makes the two paths differ, not one above the working directory.
+    absolute = Path(os.path.normpath(Path.cwd().resolve() / Path(entry).expanduser()))
+    real = absolute.resolve()
+    if absolute != real:
+        raise _config_error(
+            f"local_paths entry {entry!r} contains a symlink. List its real path"
+            f" {str(real)!r} instead."
+        )
+    return real
+
+
+def _protected_stats() -> list[os.stat_result]:
+    """Return the stat results of the protected local paths that exist."""
+    stats = []
+    for path in _protected_local_paths():
+        if path.exists():
+            stats.append(path.stat())
+    return stats
+
+
+def _is_protected(real: Path) -> bool:
+    """Return whether a real path is a protected path or lies in one."""
+    if any(real.is_relative_to(p) for p in _protected_local_paths()):
+        return True
+    # Comparing device and inode numbers also finds a hard link to a protected file,
+    # and another spelling of a protected path on a file system that ignores case.
+    protected_stats = _protected_stats()
+    for part in [real, *real.parents]:
+        if part.exists():
+            part_stat = part.stat()
+            if any(os.path.samestat(part_stat, s) for s in protected_stats):
+                return True
+    return False
+
+
 def _normalized_path(path: str, aliases: dict[str, str]) -> PurePosixPath:
     """Return a remote path with an aliased directory replaced by its main name.
     PurePosixPath drops "." components and repeated slashes, and is_relative_to
@@ -136,22 +178,22 @@ class Config(BaseModel):
                 raise ValueError(f"default_{option} {default!r} is not in {option}s")
         return self
 
-    def check_local_paths(self, *paths: str | os.PathLike | None) -> None:
-        """Raise a ToolError unless every given local path is one of the local_paths
-        or lies below one. The paths from _protected_local_paths() are refused even
-        there. Relative entries and paths are relative to the working directory, and
-        both are resolved, following symlinks, before they are compared. ``None``
-        values are skipped."""
-        allowed = [Path(entry).expanduser().resolve() for entry in self.local_paths]
-        protected = _protected_local_paths()
-        for path in paths:
-            if path is None:
-                continue
-            resolved = Path(path).expanduser().resolve()
-            if any(resolved.is_relative_to(p) for p in protected):
-                raise ToolError(f"Local path {str(path)!r} is protected.")
-            if not any(resolved.is_relative_to(d) for d in allowed):
-                raise _not_allowed("Local path", str(path), "local_paths")
+    def checked_local_path(self, path: str) -> Path:
+        """Return the real path of a local path, with "~" expanded and symlinks
+        resolved, if it is one of the local_paths or lies below one.
+
+        Raises a ToolError for a path outside local_paths and for a protected path. A
+        relative entry or path is relative to the working directory. Tools pass the
+        returned path on, because the given one may name another file, such as
+        "~/x" for open(), which doesn't expand "~".
+        """
+        allowed = [_real_entry(entry) for entry in self.local_paths]
+        real = Path(path).expanduser().resolve()
+        if _is_protected(real):
+            raise ToolError(f"Local path {path!r} is protected.")
+        if not any(real.is_relative_to(d) for d in allowed):
+            raise _not_allowed("Local path", path, "local_paths")
+        return real
 
     def check_remote_paths(self, *paths: str | None) -> None:
         """Raise a ToolError unless every given remote path is one of the

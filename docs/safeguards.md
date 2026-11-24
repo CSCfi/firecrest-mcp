@@ -55,8 +55,14 @@ or invalid.
 workstation. It must be an entry of `local_paths` or lie below one. Paths are compared
 by whole components, so `data_old` is not under `data`. Wildcards in the entries are
 not expanded. The server checks where the path really leads, so a symlink or `..` can't
-reach outside `local_paths`. Relative paths start from the project directory. An empty
-entry is a config error, so the whole project directory must be written as `.`.
+reach outside `local_paths`. The check holds when the tool is called. A link that
+replaces a directory in the path afterwards, while a transfer runs, is followed.
+Relative paths start from the project directory. An empty entry is a config error, so
+the whole project directory must be written as `.`.
+
+An entry must not contain a symlink, because changing the link would change which
+directory `local_paths` allows. The error names the entry's real path, which can be
+listed instead. Paths below it can still be given through the link.
 
 Overwriting some files on the workstation with `download` could widen what the agent may
 do or make it run commands, while `upload` could send the token to the cluster. The
@@ -65,6 +71,9 @@ server refuses these paths even if `local_paths` allows them:
 - the config file `.firecrest-mcp.toml`,
 - `.mcp.json`, `.claude/` and `.git/` in the project directory,
 - the token file.
+
+It also refuses a hard link to one of them and, on a file system that ignores case,
+another spelling of one that exists.
 
 ## System names and job IDs
 

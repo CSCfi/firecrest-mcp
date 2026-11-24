@@ -84,7 +84,8 @@ class FirecrestComputeToolsMixin:
             )
         config = load_config()
         config.check_remote_paths(working_dir, script_remote_path)
-        config.check_local_paths(script_local_path)
+        if script_local_path is not None:
+            script_local_path = str(config.checked_local_path(script_local_path))
         account, partition = config.checked_job_options(account, partition, reservation)
         result = self.client.submit(
             system_name,

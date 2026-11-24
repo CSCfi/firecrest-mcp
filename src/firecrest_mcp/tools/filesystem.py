@@ -295,12 +295,12 @@ class FirecrestFilesystemToolsMixin:
         if filename == "" or "/" in filename:
             raise ToolError(f"Filename {filename!r} must not be empty or contain '/'.")
         config = load_config()
-        config.check_local_paths(local_file)
+        real_local_file = config.checked_local_path(local_file)
         account = config.checked_transfer(account, posixpath.join(directory, filename))
         self._use_direct_transfer_limit(system_name)
         transfer = self.client.upload(
             system_name,
-            local_file=local_file,
+            local_file=real_local_file,
             directory=directory,
             filename=filename,
             account=account,
@@ -334,13 +334,13 @@ class FirecrestFilesystemToolsMixin:
         information is returned.
         """
         config = load_config()
-        config.check_local_paths(target_path)
+        real_target_path = config.checked_local_path(target_path)
         account = config.checked_transfer(account, source_path)
         self._use_direct_transfer_limit(system_name)
         transfer = self.client.download(
             system_name,
             source_path=source_path,
-            target_path=target_path,
+            target_path=real_target_path,
             account=account,
             # With False, pyfirecrest leaves the transfer of a file too large for a
             # direct transfer unfinished, as in upload.

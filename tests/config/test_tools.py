@@ -410,63 +410,52 @@ def test_transfer_uses_system_direct_limit(
     assert tools.client.MAX_DIRECT_UPLOAD_SIZE == 33554432
 
 
-# In the tests of "~" below, the home directory is the working directory. A directory
-# named "~" in it holds a decoy at the place that open() finds when it gets the path
-# "~/data/x" unexpanded.
-
-
-# raises= makes any error other than the failed assert, such as a NameError, fail
-# the suite.
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="the tools pass '~' to pyfirecrest unexpanded",
-)
-@pytest.mark.parametrize(
-    ("name", "local_arg", "other_args"),
-    [
-        ("upload", "local_file", {"directory": "/scratch/project_1", "filename": "f"}),
-        ("submit", "script_local_path", {"working_dir": ALLOWED_REMOTE_PATH}),
-    ],
-)
-def test_tilde_reads_checked_file(
-    tools, tmp_path, monkeypatch, name, local_arg, other_args
-):
-    """A local path with "~" makes the client read the file that the check allowed."""
+@pytest.fixture
+def home_with_decoy(tools, tmp_path, monkeypatch):
+    """Tools whose home directory is the working directory, with "checked" in data/x
+    and "decoy" in ~/data/x, where open() finds "~/data/x" if it isn't expanded."""
     monkeypatch.setenv("HOME", str(tmp_path))
     (tmp_path / "data" / "x").write_text("checked")
     (tmp_path / "~" / "data").mkdir(parents=True)
     (tmp_path / "~" / "data" / "x").write_text("decoy")
-    read = []
+    return tools
+
+
+def test_tilde_upload_sends_checked_file(home_with_decoy):
+    """upload of a local path with "~" sends the file that the check allowed."""
+    sent = []
 
     def read_local_file(system_name, **arguments):
-        read.append(Path(arguments[local_arg]).read_text())
-        return MOCK_CLIENT_RESULTS.get(name, {})
+        sent.append(Path(arguments["local_file"]).read_text())
 
-    client_method(tools, name).side_effect = read_local_file
-    getattr(tools, name)("lumi", **{local_arg: "~/data/x"}, **other_args)
-    assert read == ["checked"]
+    home_with_decoy.client.upload.side_effect = read_local_file
+    home_with_decoy.upload("lumi", "~/data/x", "/scratch/project_1", "f")
+    assert sent == ["checked"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="the tools pass '~' to pyfirecrest unexpanded",
-)
-def test_tilde_download_writes_checked_file(tools, tmp_path, monkeypatch):
+def test_tilde_submit_sends_checked_script(home_with_decoy):
+    """submit of a local path with "~" sends the script that the check allowed."""
+    sent = []
+
+    def read_script(system_name, **arguments):
+        sent.append(Path(arguments["script_local_path"]).read_text())
+        return {}
+
+    home_with_decoy.client.submit.side_effect = read_script
+    home_with_decoy.submit("lumi", ALLOWED_REMOTE_PATH, script_local_path="~/data/x")
+    assert sent == ["checked"]
+
+
+def test_tilde_download_writes_checked_file(home_with_decoy, tmp_path):
     """download to a local path with "~" writes the file that the check allowed."""
-    monkeypatch.setenv("HOME", str(tmp_path))
-    (tmp_path / "~" / "data").mkdir(parents=True)
-    decoy = tmp_path / "~" / "data" / "x"
-    decoy.write_text("decoy")
 
     def write_target(system_name, **arguments):
         Path(arguments["target_path"]).write_text("downloaded")
         return MOCK_CLIENT_RESULTS["download"]
 
-    tools.client.download.side_effect = write_target
-    tools.download("lumi", ALLOWED_REMOTE_PATH, "~/data/x")
-    assert decoy.read_text() == "decoy"
+    home_with_decoy.client.download.side_effect = write_target
+    home_with_decoy.download("lumi", ALLOWED_REMOTE_PATH, "~/data/x")
+    assert (tmp_path / "~" / "data" / "x").read_text() == "decoy"
     assert (tmp_path / "data" / "x").read_text() == "downloaded"
 
 
