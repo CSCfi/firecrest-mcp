@@ -40,6 +40,8 @@ MOCK_CLIENT_RESULTS = {
     "compress": None,
     "extract": None,
     "rm": None,
+    # A regular file, which rm deletes without recursive.
+    "stat": {"mode": 0o100644},
     "upload": None,
     "download": ExternalDownload(
         client=None,
@@ -587,6 +589,17 @@ def test_read_file_first_and_last_lines(tools):
     with pytest.raises(ToolError, match="at most one"):
         tools.read_file("lumi", ALLOWED_REMOTE_PATH, first_lines=1, last_lines=1)
     assert not tools.client.method_calls
+
+
+def test_rm_directory_needs_recursive(tools):
+    """rm refuses a directory unless recursive is true, because FirecREST deletes it
+    with everything in it."""
+    tools.client.stat.return_value = {"mode": 0o040755}
+    with pytest.raises(ToolError, match="is a directory"):
+        tools.rm("lumi", ALLOWED_REMOTE_PATH)
+    tools.client.rm.assert_not_called()
+    tools.rm("lumi", ALLOWED_REMOTE_PATH, recursive=True)
+    tools.client.rm.assert_called_once()
 
 
 def test_chgrp_keeps_owner(tools):

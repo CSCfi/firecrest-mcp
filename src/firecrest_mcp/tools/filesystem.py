@@ -2,6 +2,7 @@
 
 import posixpath
 import re
+from stat import S_ISDIR
 from typing import Annotated
 
 from fastmcp.exceptions import ToolError
@@ -254,14 +255,27 @@ class FirecrestFilesystemToolsMixin:
         self,
         system_name: SystemName,
         path: RemotePath,
+        recursive: Annotated[
+            bool, "must be true to delete a directory, which deletes everything in it"
+        ] = False,
         account: TransferAccount = None,
         blocking: Blocking = True,
         timeout: Timeout = None,
     ) -> dict | None:
-        """Delete a file. FirecREST first tries to delete it directly, and if that
-        times out, it deletes it in a transfer job.
+        """Delete a file, or a directory with everything in it if recursive is true.
+        FirecREST first tries to delete it directly, and if that times out, it deletes
+        it in a transfer job.
         """
         account = load_config().checked_transfer(account, path)
+        # FirecREST always deletes a directory with everything in it, so a directory
+        # needs recursive=True. With dereference=False, a symlink counts as a file,
+        # and rm deletes the link, not what it points to.
+        file_stat = self.client.stat(system_name, path=path, dereference=False)
+        if S_ISDIR(file_stat["mode"]) and not recursive:
+            raise ToolError(
+                f"{path!r} is a directory. Pass recursive=True to delete it with"
+                " everything in it."
+            )
         return self.client.rm(
             system_name,
             path=path,
