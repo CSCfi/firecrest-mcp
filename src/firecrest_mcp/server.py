@@ -1,4 +1,4 @@
-"""The MCP server: the FirecREST client and the tools of one system, chosen by
+"""The MCP server: the FirecREST client and the tools of one cluster, chosen by
 FIRECREST_URL.
 """
 
