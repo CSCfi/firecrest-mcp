@@ -243,8 +243,8 @@ def load_config() -> Config:
     name = cluster_name()
     if name not in data:
         raise _config_error(f"there is no [{name}] table, so nothing is allowed.")
-    # local_paths is a top-level key, so in the cluster's table it would be mistaken
-    # for the top-level one.
+    # local_paths is a top-level key. A copy in the cluster's table would be
+    # overwritten below and ignored without an error, so it is refused.
     if "local_paths" in data[name]:
         raise _config_error(f"local_paths must be a top-level key, not in [{name}].")
     fields = dict(data[name])
