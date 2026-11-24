@@ -6,26 +6,20 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
-from firecrest_mcp.config import (
-    check_local_paths,
-    cluster_name,
-    load_cluster_config,
-)
+from firecrest_mcp.config import cluster_name, load_config
 
 
 def test_missing_file_denies_everything(config):
     """Without a config file, nothing is allowed."""
     with pytest.raises(ToolError, match="does not exist"):
-        load_cluster_config()
-    with pytest.raises(ToolError, match="does not exist"):
-        check_local_paths("data")
+        load_config()
 
 
 def test_unconfigured_cluster_denied(config):
     """A cluster without a table is denied."""
     config('[roihu]\nremote_paths = ["/scratch/project_1"]\n')
     with pytest.raises(ToolError, match=r"no \[lumi\] table"):
-        load_cluster_config()
+        load_config()
 
 
 def test_clusters_are_separate(config, monkeypatch):
@@ -34,11 +28,11 @@ def test_clusters_are_separate(config, monkeypatch):
         '[lumi]\nremote_paths = ["/scratch/project_1"]\n'
         '[roihu]\nremote_paths = ["/scratch/project_2"]\n'
     )
-    load_cluster_config().check_remote_paths("/scratch/project_1/file")
+    load_config().cluster.check_remote_paths("/scratch/project_1/file")
     monkeypatch.setenv("FIRECREST_URL", "https://api.roihu.csc.fi/v1")
-    load_cluster_config().check_remote_paths("/scratch/project_2/file")
+    load_config().cluster.check_remote_paths("/scratch/project_2/file")
     with pytest.raises(ToolError, match="is not in remote_paths"):
-        load_cluster_config().check_remote_paths("/scratch/project_1/file")
+        load_config().cluster.check_remote_paths("/scratch/project_1/file")
 
 
 @pytest.mark.parametrize(
@@ -92,7 +86,7 @@ def test_invalid_config_rejected(config, content, error):
     """Syntax errors, unknown keys, wrong types and stray defaults are reported."""
     config(content)
     with pytest.raises(ToolError, match=error):
-        load_cluster_config()
+        load_config()
 
 
 @pytest.mark.parametrize(
@@ -103,22 +97,22 @@ def test_example_config_is_valid(config, monkeypatch, url):
     example = Path(__file__).parents[2] / "examples" / "firecrest-mcp.toml"
     config(example.read_text())
     monkeypatch.setenv("FIRECREST_URL", url)
-    assert load_cluster_config().remote_paths
+    assert load_config().cluster.remote_paths
 
 
 def test_changes_apply_without_reload(config):
     """Edits to the config file apply without a restart."""
     config('[lumi]\nremote_paths = ["/scratch/project_1/"]\n')
-    load_cluster_config().check_remote_paths("/scratch/project_1/file")
+    load_config().cluster.check_remote_paths("/scratch/project_1/file")
     config('[lumi]\nremote_paths = ["/scratch/project_2/"]\n')
     with pytest.raises(ToolError, match="is not in remote_paths"):
-        load_cluster_config().check_remote_paths("/scratch/project_1/file")
+        load_config().cluster.check_remote_paths("/scratch/project_1/file")
 
 
 def test_account_defaults(config):
     """A missing account becomes the default; a given one must be allowed."""
     config()
-    cluster = load_cluster_config()
+    cluster = load_config().cluster
     assert cluster.checked_account(None) == "project_1"
     assert cluster.checked_account("project_2") == "project_2"
     with pytest.raises(ToolError, match="Account 'project_3' is not in accounts"):
@@ -129,19 +123,19 @@ def test_account_without_default_required(config):
     """Without default_account, an account must be given."""
     config('[lumi]\naccounts = ["project_1"]\n')
     with pytest.raises(ToolError, match="No account given"):
-        load_cluster_config().checked_account(None)
+        load_config().cluster.checked_account(None)
 
 
 def test_group(config):
     """Only listed groups are allowed, and a missing groups allows none."""
     config()
-    load_cluster_config().check_group("project_1")
+    load_config().cluster.check_group("project_1")
     for group in ["other", ""]:
         with pytest.raises(ToolError, match="is not in groups"):
-            load_cluster_config().check_group(group)
+            load_config().cluster.check_group(group)
     config("[lumi]\n")
     with pytest.raises(ToolError, match="is not in groups"):
-        load_cluster_config().check_group("project_1")
+        load_config().cluster.check_group("project_1")
 
 
 @pytest.fixture
@@ -155,30 +149,30 @@ def local(config, tmp_path):
 def test_local_allowed(local, path):
     """Paths in or below local_paths pass; relative entries mean the server's
     working directory."""
-    check_local_paths(path)
+    load_config().check_local_paths(path)
 
 
 @pytest.mark.parametrize("path", [".", "other", "data/../other", "/abs", "/etc/x"])
 def test_local_denied(local, path):
     """Paths outside local_paths are denied, '..' is resolved first."""
     with pytest.raises(ToolError, match="is not in local_paths"):
-        check_local_paths(path)
+        load_config().check_local_paths(path)
 
 
 def test_local_home_expanded(config, tmp_path, monkeypatch):
     """A "~" in local_paths and in paths means the home directory."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     config('local_paths = ["~/data"]\n[lumi]\n')
-    check_local_paths("~/data/x", tmp_path / "home" / "data" / "x")
+    load_config().check_local_paths("~/data/x", tmp_path / "home" / "data" / "x")
     with pytest.raises(ToolError, match="is not in local_paths"):
-        check_local_paths("~/other")
+        load_config().check_local_paths("~/other")
 
 
 def test_local_symlink_resolved(local, tmp_path):
     """A symlink inside an allowed directory is checked by its target."""
     (tmp_path / "data" / "link").symlink_to("/etc")
     with pytest.raises(ToolError, match="is not in local_paths"):
-        check_local_paths("data/link/passwd")
+        load_config().check_local_paths("data/link/passwd")
 
 
 @pytest.mark.parametrize(
@@ -191,14 +185,14 @@ def test_local_protected(config, path):
     working directory."""
     config('local_paths = ["."]\n[lumi]\n')
     with pytest.raises(ToolError, match="is protected"):
-        check_local_paths(path)
+        load_config().check_local_paths(path)
 
 
 def test_local_missing_key_denies_everything(config):
     """Without local_paths, no local path is allowed."""
     config("[lumi]\n")
     with pytest.raises(ToolError, match="is not in local_paths"):
-        check_local_paths("file")
+        load_config().check_local_paths("file")
 
 
 @pytest.mark.parametrize(
@@ -212,7 +206,7 @@ def test_local_paths_must_be_strings(config, content, error):
     """A local_paths that isn't a list of strings is a config error."""
     config(content + "\n[lumi]\n")
     with pytest.raises(ToolError, match=error):
-        check_local_paths("data")
+        load_config().check_local_paths("data")
 
 
 def test_local_paths_empty_entry(config):
@@ -220,4 +214,4 @@ def test_local_paths_empty_entry(config):
     working directory by mistake."""
     config('local_paths = ["data", ""]\n[lumi]\n')
     with pytest.raises(ToolError, match="must not contain an empty string"):
-        check_local_paths("data")
+        load_config().check_local_paths("data")

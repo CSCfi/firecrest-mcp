@@ -60,11 +60,13 @@ One server process serves one cluster, chosen by `FIRECREST_URL`.
 
 ### Config file
 
-`config.py` reads `.firecrest-mcp.toml` on every call and fails closed. Tools check all
-of their checked arguments before calling the client:
+`config.py` reads `.firecrest-mcp.toml` on every call to `load_config()` and fails
+closed. A tool with several checks starts with `config = load_config()`, so the file is
+read once per call. Tools check all of their checked arguments before calling the
+client:
 
-- `load_cluster_config().check_remote_paths(*paths)` for remote paths.
-- `check_local_paths(*paths)` for local paths.
+- `load_config().cluster.check_remote_paths(*paths)` for remote paths.
+- `load_config().check_local_paths(*paths)` for local paths.
 - `ClusterConfig.checked_account(account)` for accounts. It returns
   `default_account` for `None`. Pass the result on to the client. Tools that may run
   a transfer job call `checked_transfer(account, *paths)`, which checks both.

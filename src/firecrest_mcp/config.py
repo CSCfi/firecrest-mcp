@@ -270,13 +270,3 @@ def load_config() -> Config:
             location = ".".join(parts)
             problems.append(f"{location}: {err['msg']}")
         raise _config_error("; ".join(problems)) from None
-
-
-def load_cluster_config() -> ClusterConfig:
-    """Return the config for this server's cluster."""
-    return load_config().cluster
-
-
-def check_local_paths(*paths: str | os.PathLike | None) -> None:
-    """Check local paths with Config.check_local_paths."""
-    load_config().check_local_paths(*paths)
