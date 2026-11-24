@@ -64,13 +64,14 @@ An entry must not contain a symlink, because changing the link would change whic
 directory `local_paths` allows. The error names the entry's real path, which can be
 listed instead. Paths below it can still be given through the link.
 
-Overwriting some files on the workstation with `download` could widen what the agent may
-do or make it run commands, while `upload` could send the token to the cluster. The
-server refuses these paths even if `local_paths` allows them:
+Overwriting the config file with `download` would widen what the tools may do, and
+`upload` could send the token to the cluster. Writing into `.git/` could replace your
+repository or add a hook that git runs. The server refuses these paths even if
+`local_paths` allows them:
 
 - the config file `.firecrest-mcp.toml`,
-- `.mcp.json`, `.claude/` and `.git/` in the project directory,
-- the token file.
+- the token file,
+- `.git/` in the project directory.
 
 It also refuses a hard link to one of them and, on a file system that ignores case,
 another spelling of one that exists.
@@ -146,8 +147,8 @@ account before giving it a token:
   safeguard above. The server's instructions tell the agent not to, but only the
   agent's own permission settings can stop it. The
   [README](../README.md#agent-permissions) has an example for Claude Code.
-- Sending any file in `local_paths` to the cluster. Only `.firecrest-mcp.toml`,
-  `.mcp.json`, `.claude/`, `.git/` and the token file are protected.
+- Sending any file in `local_paths` to the cluster, or overwriting one with
+  `download`. Only `.firecrest-mcp.toml`, the token file and `.git/` are protected.
 - Following a symlink on the cluster from inside `remote_paths` to outside it.
 - Reading anything a job writes to an allowed directory.
 - Starting transfer jobs in FirecREST's transfer partition (`interactive` on LUMI and

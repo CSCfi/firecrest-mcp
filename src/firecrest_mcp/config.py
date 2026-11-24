@@ -23,13 +23,12 @@ CONFIG_PATH = Path(".firecrest-mcp.toml")
 
 def _protected_local_paths() -> list[Path]:
     """Return the local paths that no tool may use, resolved."""
-    # A tool that writes to these files could change the server's or the agent's
-    # configuration or run code, and one that reads the token file could copy the
-    # token. Relative paths are relative to the working directory.
+    # A tool that writes the config file could widen what the tools may do, one that
+    # writes into .git could replace the user's repository or add a hook that git
+    # runs, and one that reads the token file could copy the token. Relative paths
+    # are relative to the working directory.
     paths = [
         CONFIG_PATH,
-        Path(".mcp.json"),
-        Path(".claude"),
         Path(".git"),
         token_path(),
     ]
@@ -123,22 +122,18 @@ def _real_entry(entry: str) -> Path:
     return real
 
 
-def _protected_stats() -> list[os.stat_result]:
-    """Return the stat results of the protected local paths that exist."""
-    stats = []
-    for path in _protected_local_paths():
-        if path.exists():
-            stats.append(path.stat())
-    return stats
-
-
 def _is_protected(real: Path) -> bool:
     """Return whether a real path is a protected path or lies in one."""
-    if any(real.is_relative_to(p) for p in _protected_local_paths()):
+    protected = _protected_local_paths()
+    if any(real.is_relative_to(p) for p in protected):
         return True
     # Comparing device and inode numbers also finds a hard link to a protected file,
     # and another spelling of a protected path on a file system that ignores case.
-    protected_stats = _protected_stats()
+    # Parents are compared too, for a path inside .git.
+    protected_stats = []
+    for path in protected:
+        if path.exists():
+            protected_stats.append(path.stat())
     for part in [real, *real.parents]:
         if part.exists():
             part_stat = part.stat()

@@ -181,17 +181,22 @@ def test_local_symlink_resolved(local, tmp_path):
         load_config().checked_local_path("data/link/passwd")
 
 
-@pytest.mark.parametrize(
-    "path",
-    [".firecrest-mcp.toml", ".mcp.json", ".claude/x", ".git/hooks/x", "token"],
-)
+@pytest.mark.parametrize("path", [".firecrest-mcp.toml", "token", ".git/hooks/x"])
 def test_local_protected(config, path):
-    """Server and agent configuration and the token file are never allowed, even
-    below local_paths. The config fixture puts the token file at "token" in the
-    working directory."""
+    """The server's config file, the token file and the project's .git directory are
+    never allowed, even below local_paths. The config fixture puts the token file at
+    "token" in the working directory."""
     config('local_paths = ["."]\n[lumi]\n')
     with pytest.raises(ToolError, match="is protected"):
         load_config().checked_local_path(path)
+
+
+@pytest.mark.parametrize("path", [".mcp.json", ".claude/x"])
+def test_local_agent_files_allowed(config, path):
+    """An agent's own files, such as its settings, are allowed when local_paths
+    includes them."""
+    config('local_paths = ["."]\n[lumi]\n')
+    load_config().checked_local_path(path)
 
 
 @pytest.mark.parametrize("protected", ["token", ".firecrest-mcp.toml"])
