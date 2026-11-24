@@ -10,7 +10,7 @@ from firecrest_mcp.config import load_config
 
 
 def check_remote_paths(*paths: str | None) -> None:
-    load_config().cluster.check_remote_paths(*paths)
+    load_config().check_remote_paths(*paths)
 
 
 @pytest.mark.parametrize(

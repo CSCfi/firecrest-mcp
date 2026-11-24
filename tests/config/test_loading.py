@@ -28,11 +28,11 @@ def test_clusters_are_separate(config, monkeypatch):
         '[lumi]\nremote_paths = ["/scratch/project_1"]\n'
         '[roihu]\nremote_paths = ["/scratch/project_2"]\n'
     )
-    load_config().cluster.check_remote_paths("/scratch/project_1/file")
+    load_config().check_remote_paths("/scratch/project_1/file")
     monkeypatch.setenv("FIRECREST_URL", "https://api.roihu.csc.fi/v1")
-    load_config().cluster.check_remote_paths("/scratch/project_2/file")
+    load_config().check_remote_paths("/scratch/project_2/file")
     with pytest.raises(ToolError, match="is not in remote_paths"):
-        load_config().cluster.check_remote_paths("/scratch/project_1/file")
+        load_config().check_remote_paths("/scratch/project_1/file")
 
 
 @pytest.mark.parametrize(
@@ -73,6 +73,10 @@ def test_cluster_name_underivable(monkeypatch, url):
         ("roihu = 1", "roihu must be a table"),
         ("[lumi.cpu]", "lumi.cpu: Extra inputs"),
         (
+            "[lumi]\nlocal_paths = ['data']",
+            r"local_paths must be a top-level key, not in \[lumi\]",
+        ),
+        (
             "[lumi]\naccounts = ['p']\ndefault_account = 'q'",
             "default_account 'q' is not in accounts",
         ),
@@ -97,45 +101,44 @@ def test_example_config_is_valid(config, monkeypatch, url):
     example = Path(__file__).parents[2] / "examples" / "firecrest-mcp.toml"
     config(example.read_text())
     monkeypatch.setenv("FIRECREST_URL", url)
-    assert load_config().cluster.remote_paths
+    assert load_config().remote_paths
 
 
 def test_changes_apply_without_reload(config):
     """Edits to the config file apply without a restart."""
     config('[lumi]\nremote_paths = ["/scratch/project_1/"]\n')
-    load_config().cluster.check_remote_paths("/scratch/project_1/file")
+    load_config().check_remote_paths("/scratch/project_1/file")
     config('[lumi]\nremote_paths = ["/scratch/project_2/"]\n')
     with pytest.raises(ToolError, match="is not in remote_paths"):
-        load_config().cluster.check_remote_paths("/scratch/project_1/file")
+        load_config().check_remote_paths("/scratch/project_1/file")
 
 
 def test_account_defaults(config):
     """A missing account becomes the default; a given one must be allowed."""
     config()
-    cluster = load_config().cluster
-    assert cluster.checked_account(None) == "project_1"
-    assert cluster.checked_account("project_2") == "project_2"
+    assert load_config().checked_account(None) == "project_1"
+    assert load_config().checked_account("project_2") == "project_2"
     with pytest.raises(ToolError, match="Account 'project_3' is not in accounts"):
-        cluster.checked_account("project_3")
+        load_config().checked_account("project_3")
 
 
 def test_account_without_default_required(config):
     """Without default_account, an account must be given."""
     config('[lumi]\naccounts = ["project_1"]\n')
     with pytest.raises(ToolError, match="No account given"):
-        load_config().cluster.checked_account(None)
+        load_config().checked_account(None)
 
 
 def test_group(config):
     """Only listed groups are allowed, and a missing groups allows none."""
     config()
-    load_config().cluster.check_group("project_1")
+    load_config().check_group("project_1")
     for group in ["other", ""]:
         with pytest.raises(ToolError, match="is not in groups"):
-            load_config().cluster.check_group(group)
+            load_config().check_group(group)
     config("[lumi]\n")
     with pytest.raises(ToolError, match="is not in groups"):
-        load_config().cluster.check_group("project_1")
+        load_config().check_group("project_1")
 
 
 @pytest.fixture

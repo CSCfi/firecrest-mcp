@@ -83,11 +83,9 @@ class FirecrestComputeToolsMixin:
                 " must be given."
             )
         config = load_config()
-        config.cluster.check_remote_paths(working_dir, script_remote_path)
+        config.check_remote_paths(working_dir, script_remote_path)
         config.check_local_paths(script_local_path)
-        account, partition = config.cluster.checked_job_options(
-            account, partition, reservation
-        )
+        account, partition = config.checked_job_options(account, partition, reservation)
         result = self.client.submit(
             system_name,
             working_dir=working_dir,
@@ -179,7 +177,7 @@ class FirecrestComputeToolsMixin:
         the job's. FirecREST kills it after the time limit that the systems tool
         shows as ssh.timeout.commandExecution.
         """
-        load_config().cluster.check_remote_paths(output_path)
+        load_config().check_remote_paths(output_path)
         check_own_job(self.client, system_name, jobid)
         # FirecREST runs "srun ... <command>" in a login node shell, which would run
         # anything after a ";" itself. bash -c keeps the whole command in the job.

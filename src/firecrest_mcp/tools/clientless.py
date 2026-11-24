@@ -13,5 +13,5 @@ def show_config() -> dict:
     config = load_config()
     return {
         "local_paths": config.local_paths,
-        cluster_name(): config.cluster.model_dump(),
+        cluster_name(): config.model_dump(exclude={"local_paths"}),
     }

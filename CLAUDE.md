@@ -65,17 +65,17 @@ closed. A tool with several checks starts with `config = load_config()`, so the 
 read once per call. Tools check all of their checked arguments before calling the
 client:
 
-- `load_config().cluster.check_remote_paths(*paths)` for remote paths.
+- `load_config().check_remote_paths(*paths)` for remote paths.
 - `load_config().check_local_paths(*paths)` for local paths.
-- `ClusterConfig.checked_account(account)` for accounts. It returns
-  `default_account` for `None`. Pass the result on to the client. Tools that may run
-  a transfer job call `checked_transfer(account, *paths)`, which checks both.
-- `ClusterConfig.check_group(group)` for `chgrp`.
+- `Config.checked_account(account)` for accounts. It returns `default_account` for
+  `None`. Pass the result on to the client. Tools that may run a transfer job call
+  `checked_transfer(account, *paths)`, which checks both.
+- `Config.check_group(group)` for `chgrp`.
 - `own_jobs(client, system_name, jobs, jobid)` in `tools/compute.py` for job queries,
   and `check_own_job(client, system_name, jobid)` for tools that act on a job by ID,
   because FirecREST returns any user's job by ID.
-- `ClusterConfig.checked_job_options` for `submit`. Pass the account and partition it
-  returns to the client, because they override the script's `#SBATCH` lines.
+- `Config.checked_job_options` for `submit`. Pass the account and partition it returns
+  to the client, because they override the script's `#SBATCH` lines.
 
 When changing a tool's checked parameters, update `TOOLS_RESTRICTED` and
 `TOOLS_WITH_ACCOUNT` in `tests/config/test_tools.py`. A new tool goes into
