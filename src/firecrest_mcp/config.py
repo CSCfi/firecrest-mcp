@@ -23,13 +23,12 @@ CONFIG_PATH = Path(".firecrest-mcp.toml")
 
 def _protected_local_paths() -> list[Path]:
     """Return the local paths that no tool may use, resolved."""
-    # A tool that writes to these files could change the server's or the agent's
-    # configuration or run code, and one that reads the token file could copy the
-    # token. Relative paths are relative to the working directory.
+    # A tool that writes the config file could widen what the tools may do, one that
+    # writes into .git could replace the user's repository or add a hook that git
+    # runs, and one that reads the token file could copy the token. Relative paths
+    # are relative to the working directory.
     paths = [
         CONFIG_PATH,
-        Path(".mcp.json"),
-        Path(".claude"),
         Path(".git"),
         token_path(),
     ]
@@ -77,6 +76,13 @@ def _check_remote_syntax(path: str) -> str:
     # them, so a quote would end the path and run the rest as commands.
     if "'" in path or any(not char.isprintable() for char in path):
         raise ValueError(f"{path!r} must not contain quotes or control characters")
+    # FirecREST releases up to 2.6.2 put the path of a large download into a transfer
+    # job script without quotes, and that of a large upload in double quotes. There,
+    # these characters could end the path and run the rest as commands.
+    if any(char in ' "\\;&|<>()$`' for char in path):
+        raise ValueError(
+            f'{path!r} must not contain spaces or any of the characters "\\;&|<>()$`'
+        )
     return path
 
 
@@ -96,6 +102,44 @@ def cluster_name() -> str:
     if not labels:
         raise ToolError(f"Cannot derive a cluster name from FIRECREST_URL {url!r}.")
     return labels[0]
+
+
+def _real_entry(entry: str) -> Path:
+    """Return a local_paths entry as an absolute path with "~" expanded.
+
+    Raises a ToolError if the entry's path contains a symlink, because changing
+    the link would change which directory local_paths allows.
+    """
+    # The working directory is resolved first, so that only a link in the entry itself
+    # makes the two paths differ, not one above the working directory.
+    absolute = Path(os.path.normpath(Path.cwd().resolve() / Path(entry).expanduser()))
+    real = absolute.resolve()
+    if absolute != real:
+        raise _config_error(
+            f"local_paths entry {entry!r} contains a symlink. List its real path"
+            f" {str(real)!r} instead."
+        )
+    return real
+
+
+def _is_protected(real: Path) -> bool:
+    """Return whether a real path is a protected path or lies in one."""
+    protected = _protected_local_paths()
+    if any(real.is_relative_to(p) for p in protected):
+        return True
+    # Comparing device and inode numbers also finds a hard link to a protected file,
+    # and another spelling of a protected path on a file system that ignores case.
+    # Parents are compared too, for a path inside .git.
+    protected_stats = []
+    for path in protected:
+        if path.exists():
+            protected_stats.append(path.stat())
+    for part in [real, *real.parents]:
+        if part.exists():
+            part_stat = part.stat()
+            if any(os.path.samestat(part_stat, s) for s in protected_stats):
+                return True
+    return False
 
 
 def _normalized_path(path: str, aliases: dict[str, str]) -> PurePosixPath:
@@ -136,22 +180,22 @@ class Config(BaseModel):
                 raise ValueError(f"default_{option} {default!r} is not in {option}s")
         return self
 
-    def check_local_paths(self, *paths: str | os.PathLike | None) -> None:
-        """Raise a ToolError unless every given local path is one of the local_paths
-        or lies below one. The paths from _protected_local_paths() are refused even
-        there. Relative entries and paths are relative to the working directory, and
-        both are resolved, following symlinks, before they are compared. ``None``
-        values are skipped."""
-        allowed = [Path(entry).expanduser().resolve() for entry in self.local_paths]
-        protected = _protected_local_paths()
-        for path in paths:
-            if path is None:
-                continue
-            resolved = Path(path).expanduser().resolve()
-            if any(resolved.is_relative_to(p) for p in protected):
-                raise ToolError(f"Local path {str(path)!r} is protected.")
-            if not any(resolved.is_relative_to(d) for d in allowed):
-                raise _not_allowed("Local path", str(path), "local_paths")
+    def checked_local_path(self, path: str) -> Path:
+        """Return the real path of a local path, with "~" expanded and symlinks
+        resolved, if it is one of the local_paths or lies below one.
+
+        Raises a ToolError for a path outside local_paths and for a protected path. A
+        relative entry or path is relative to the working directory. Tools pass the
+        returned path on, because the given one may name another file, such as
+        "~/x" for open(), which doesn't expand "~".
+        """
+        allowed = [_real_entry(entry) for entry in self.local_paths]
+        real = Path(path).expanduser().resolve()
+        if _is_protected(real):
+            raise ToolError(f"Local path {path!r} is protected.")
+        if not any(real.is_relative_to(d) for d in allowed):
+            raise _not_allowed("Local path", path, "local_paths")
+        return real
 
     def check_remote_paths(self, *paths: str | None) -> None:
         """Raise a ToolError unless every given remote path is one of the

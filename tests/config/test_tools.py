@@ -4,6 +4,7 @@ read_file, chgrp, upload, download and show_config.
 """
 
 import asyncio
+from pathlib import Path
 
 import pytest
 from fastmcp import Client, FastMCP
@@ -39,6 +40,8 @@ MOCK_CLIENT_RESULTS = {
     "compress": None,
     "extract": None,
     "rm": None,
+    # A regular file, which rm deletes without recursive.
+    "stat": {"mode": 0o100644},
     "upload": None,
     "download": ExternalDownload(
         client=None,
@@ -409,6 +412,55 @@ def test_transfer_uses_system_direct_limit(
     assert tools.client.MAX_DIRECT_UPLOAD_SIZE == 33554432
 
 
+@pytest.fixture
+def home_with_decoy(tools, tmp_path, monkeypatch):
+    """Tools whose home directory is the working directory, with "checked" in data/x
+    and "decoy" in ~/data/x, where open() finds "~/data/x" if it isn't expanded."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "data" / "x").write_text("checked")
+    (tmp_path / "~" / "data").mkdir(parents=True)
+    (tmp_path / "~" / "data" / "x").write_text("decoy")
+    return tools
+
+
+def test_tilde_upload_sends_checked_file(home_with_decoy):
+    """upload of a local path with "~" sends the file that the check allowed."""
+    sent = []
+
+    def read_local_file(system_name, **arguments):
+        sent.append(Path(arguments["local_file"]).read_text())
+
+    home_with_decoy.client.upload.side_effect = read_local_file
+    home_with_decoy.upload("lumi", "~/data/x", "/scratch/project_1", "f")
+    assert sent == ["checked"]
+
+
+def test_tilde_submit_sends_checked_script(home_with_decoy):
+    """submit of a local path with "~" sends the script that the check allowed."""
+    sent = []
+
+    def read_script(system_name, **arguments):
+        sent.append(Path(arguments["script_local_path"]).read_text())
+        return {}
+
+    home_with_decoy.client.submit.side_effect = read_script
+    home_with_decoy.submit("lumi", ALLOWED_REMOTE_PATH, script_local_path="~/data/x")
+    assert sent == ["checked"]
+
+
+def test_tilde_download_writes_checked_file(home_with_decoy, tmp_path):
+    """download to a local path with "~" writes the file that the check allowed."""
+
+    def write_target(system_name, **arguments):
+        Path(arguments["target_path"]).write_text("downloaded")
+        return MOCK_CLIENT_RESULTS["download"]
+
+    home_with_decoy.client.download.side_effect = write_target
+    home_with_decoy.download("lumi", ALLOWED_REMOTE_PATH, "~/data/x")
+    assert (tmp_path / "~" / "data" / "x").read_text() == "decoy"
+    assert (tmp_path / "data" / "x").read_text() == "downloaded"
+
+
 def submit(tools, script, **job_options):
     """Submit a script and return the keyword arguments the client was called with."""
     tools.submit("lumi", ALLOWED_REMOTE_PATH, script_str=script, **job_options)
@@ -537,6 +589,17 @@ def test_read_file_first_and_last_lines(tools):
     with pytest.raises(ToolError, match="at most one"):
         tools.read_file("lumi", ALLOWED_REMOTE_PATH, first_lines=1, last_lines=1)
     assert not tools.client.method_calls
+
+
+def test_rm_directory_needs_recursive(tools):
+    """rm refuses a directory unless recursive is true, because FirecREST deletes it
+    with everything in it."""
+    tools.client.stat.return_value = {"mode": 0o040755}
+    with pytest.raises(ToolError, match="is a directory"):
+        tools.rm("lumi", ALLOWED_REMOTE_PATH)
+    tools.client.rm.assert_not_called()
+    tools.rm("lumi", ALLOWED_REMOTE_PATH, recursive=True)
+    tools.client.rm.assert_called_once()
 
 
 def test_chgrp_keeps_owner(tools):

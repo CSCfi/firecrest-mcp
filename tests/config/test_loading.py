@@ -1,6 +1,7 @@
 """Tests for reading the config file and its account, group and local path
 checks."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -152,50 +153,99 @@ def local(config, tmp_path):
 def test_local_allowed(local, path):
     """Paths in or below local_paths pass; relative entries mean the server's
     working directory."""
-    load_config().check_local_paths(path)
+    load_config().checked_local_path(path)
 
 
 @pytest.mark.parametrize("path", [".", "other", "data/../other", "/abs", "/etc/x"])
 def test_local_denied(local, path):
     """Paths outside local_paths are denied, '..' is resolved first."""
     with pytest.raises(ToolError, match="is not in local_paths"):
-        load_config().check_local_paths(path)
+        load_config().checked_local_path(path)
 
 
 def test_local_home_expanded(config, tmp_path, monkeypatch):
     """A "~" in local_paths and in paths means the home directory."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     config('local_paths = ["~/data"]\n[lumi]\n')
-    load_config().check_local_paths("~/data/x", tmp_path / "home" / "data" / "x")
+    real_path = tmp_path / "home" / "data" / "x"
+    assert load_config().checked_local_path("~/data/x") == real_path
+    assert load_config().checked_local_path(str(real_path)) == real_path
     with pytest.raises(ToolError, match="is not in local_paths"):
-        load_config().check_local_paths("~/other")
+        load_config().checked_local_path("~/other")
 
 
 def test_local_symlink_resolved(local, tmp_path):
     """A symlink inside an allowed directory is checked by its target."""
     (tmp_path / "data" / "link").symlink_to("/etc")
     with pytest.raises(ToolError, match="is not in local_paths"):
-        load_config().check_local_paths("data/link/passwd")
+        load_config().checked_local_path("data/link/passwd")
 
 
-@pytest.mark.parametrize(
-    "path",
-    [".firecrest-mcp.toml", ".mcp.json", ".claude/x", ".git/hooks/x", "token"],
-)
+@pytest.mark.parametrize("path", [".firecrest-mcp.toml", "token", ".git/hooks/x"])
 def test_local_protected(config, path):
-    """Server and agent configuration and the token file are never allowed, even
-    below local_paths. The config fixture puts the token file at "token" in the
-    working directory."""
+    """The server's config file, the token file and the project's .git directory are
+    never allowed, even below local_paths. The config fixture puts the token file at
+    "token" in the working directory."""
     config('local_paths = ["."]\n[lumi]\n')
     with pytest.raises(ToolError, match="is protected"):
-        load_config().check_local_paths(path)
+        load_config().checked_local_path(path)
+
+
+@pytest.mark.parametrize("path", [".mcp.json", ".claude/x"])
+def test_local_agent_files_allowed(config, path):
+    """An agent's own files, such as its settings, are allowed when local_paths
+    includes them."""
+    config('local_paths = ["."]\n[lumi]\n')
+    load_config().checked_local_path(path)
+
+
+@pytest.mark.parametrize("protected", ["token", ".firecrest-mcp.toml"])
+def test_local_hard_link_to_protected_file(local, tmp_path, protected):
+    """A hard link below local_paths to a protected file is refused, because it is
+    the same file under another name."""
+    (tmp_path / "token").write_text("token")
+    (tmp_path / "data" / "link").hardlink_to(tmp_path / protected)
+    with pytest.raises(ToolError, match="is protected"):
+        load_config().checked_local_path("data/link")
+
+
+def is_case_insensitive(directory: Path) -> bool:
+    """Return whether the file system of a directory ignores the case of names."""
+    probe = directory / "probe"
+    probe.write_text("")
+    insensitive = (directory / "PROBE").exists()
+    probe.unlink()
+    return insensitive
+
+
+def test_local_protected_in_other_case(config, tmp_path):
+    """On a file system that ignores case, such as macOS's default, another spelling
+    of a protected file is the same file and is refused."""
+    if not is_case_insensitive(tmp_path):
+        pytest.skip("the file system is case-sensitive")
+    config('local_paths = ["."]\n[lumi]\n')
+    with pytest.raises(ToolError, match="is protected"):
+        load_config().checked_local_path(".FIRECREST-MCP.TOML")
+
+
+@pytest.mark.parametrize("entry", ["work", "work/sub"])
+def test_local_entry_with_symlink_refused(config, tmp_path, entry):
+    """An entry with a symlink in its path is refused, and the error names the real
+    path to list instead. Otherwise changing the link would change which
+    directory is allowed."""
+    config(f'local_paths = ["{entry}"]\n[lumi]\n')
+    (tmp_path / "elsewhere" / "sub").mkdir(parents=True)
+    (tmp_path / "work").symlink_to(tmp_path / "elsewhere")
+    real_path = (tmp_path / entry).resolve()
+    with pytest.raises(ToolError, match=re.escape(str(real_path))):
+        load_config().checked_local_path(f"{entry}/x")
 
 
 def test_local_missing_key_denies_everything(config):
     """Without local_paths, no local path is allowed."""
     config("[lumi]\n")
     with pytest.raises(ToolError, match="is not in local_paths"):
-        load_config().check_local_paths("file")
+        load_config().checked_local_path("file")
 
 
 @pytest.mark.parametrize(
@@ -209,7 +259,7 @@ def test_local_paths_must_be_strings(config, content, error):
     """A local_paths that isn't a list of strings is a config error."""
     config(content + "\n[lumi]\n")
     with pytest.raises(ToolError, match=error):
-        load_config().check_local_paths("data")
+        load_config().checked_local_path("data")
 
 
 def test_local_paths_empty_entry(config):
@@ -219,4 +269,4 @@ def test_local_paths_empty_entry(config):
     with pytest.raises(
         ToolError, match=r"local_paths\.1: .*must not be an empty string"
     ):
-        load_config().check_local_paths("data")
+        load_config().checked_local_path("data")

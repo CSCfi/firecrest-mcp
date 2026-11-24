@@ -55,16 +55,26 @@ or invalid.
 workstation. It must be an entry of `local_paths` or lie below one. Paths are compared
 by whole components, so `data_old` is not under `data`. Wildcards in the entries are
 not expanded. The server checks where the path really leads, so a symlink or `..` can't
-reach outside `local_paths`. Relative paths start from the project directory. An empty
-entry is a config error, so the whole project directory must be written as `.`.
+reach outside `local_paths`. The check holds when the tool is called. A link that
+replaces a directory in the path afterwards, while a transfer runs, is followed.
+Relative paths start from the project directory. An empty entry is a config error, so
+the whole project directory must be written as `.`.
 
-Overwriting some files on the workstation with `download` could widen what the agent may
-do or make it run commands, while `upload` could send the token to the cluster. The
-server refuses these paths even if `local_paths` allows them:
+An entry must not contain a symlink, because changing the link would change which
+directory `local_paths` allows. The error names the entry's real path, which can be
+listed instead. Paths below it can still be given through the link.
+
+Overwriting the config file with `download` would widen what the tools may do, and
+`upload` could send the token to the cluster. Writing into `.git/` could replace your
+repository or add a hook that git runs. The server refuses these paths even if
+`local_paths` allows them:
 
 - the config file `.firecrest-mcp.toml`,
-- `.mcp.json`, `.claude/` and `.git/` in the project directory,
-- the token file.
+- the token file,
+- `.git/` in the project directory.
+
+It also refuses a hard link to one of them and, on a file system that ignores case,
+another spelling of one that exists.
 
 ## System names and job IDs
 
@@ -80,6 +90,10 @@ All file, transfer and job tools that take a path on the cluster check it:
 - The path must be absolute and must not contain a `..` component, a single quote or a
   control character. FirecREST puts paths into shell commands in single quotes, so a
   quote would end the path.
+- The path must not contain a space or any of `"\;&|<>()$` and the backtick. FirecREST
+  releases up to 2.6.2 put the path of a large download into a transfer job script
+  without quotes, and that of a large upload in double quotes, where these characters
+  could run commands.
 - The path must be an entry of `remote_paths` or lie below one, compared by whole
   components and without wildcards, as local paths are.
 - LUMI's `/project` and `/projappl` count as the same directory, so either name in the
@@ -133,8 +147,8 @@ account before giving it a token:
   safeguard above. The server's instructions tell the agent not to, but only the
   agent's own permission settings can stop it. The
   [README](../README.md#agent-permissions) has an example for Claude Code.
-- Sending any file in `local_paths` to the cluster. Only `.firecrest-mcp.toml`,
-  `.mcp.json`, `.claude/`, `.git/` and the token file are protected.
+- Sending any file in `local_paths` to the cluster, or overwriting one with
+  `download`. Only `.firecrest-mcp.toml`, the token file and `.git/` are protected.
 - Following a symlink on the cluster from inside `remote_paths` to outside it.
 - Reading anything a job writes to an allowed directory.
 - Starting transfer jobs in FirecREST's transfer partition (`interactive` on LUMI and

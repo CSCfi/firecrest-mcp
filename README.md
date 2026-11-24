@@ -139,10 +139,10 @@ agent share a file you moved into a project directory with the project's members
 ### Risks
 
 **Don't list your home directory or other places with credentials, such as `~/.ssh`, in
-`local_paths`.** The server protects only the token file and files that could widen the
-agent's access or run commands (the config file and `.mcp.json`, `.claude/` and `.git/`
-in the project directory). It can't know where else you keep secrets, so the agent can
-send anything else in `local_paths` to the cluster.
+`local_paths`.** The server protects only its own config file, the token file and the
+project's `.git/`. It can't know where else you keep secrets or which files run code,
+so the agent can send anything else in `local_paths` to the cluster and overwrite it
+with `download`.
 
 **The `submit` tool doesn't check the job script.** Its commands run with all of your
 permissions, including outside `remote_paths`.

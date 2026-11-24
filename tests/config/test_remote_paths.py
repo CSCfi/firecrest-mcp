@@ -75,10 +75,22 @@ def test_dots_inside_names_allowed(config):
 
 
 def test_other_special_characters_allowed(config):
-    """Spaces, double quotes and other shell characters stay inside FirecREST's
-    single quotes, so they are allowed."""
+    """Characters such as "*", "#" and "{" don't run commands in FirecREST's transfer
+    job scripts, so they are allowed."""
     config()
-    check_remote_paths('/scratch/project_1/a b "c" $(d) ;&|')
+    check_remote_paths("/scratch/project_1/a*b#c{d}e[f]g?h!i%j+k,l=m@n")
+
+
+@pytest.mark.parametrize(
+    "char", [" ", '"', "\\", ";", "&", "|", "<", ">", "(", ")", "$", "`"]
+)
+def test_shell_characters_rejected(config, char):
+    """Shell characters are refused, because FirecREST releases up to 2.6.2 put the
+    path of a large download into a transfer job script without quotes, and that of a
+    large upload in double quotes."""
+    config()
+    with pytest.raises(ToolError, match="must not contain"):
+        check_remote_paths(f"/scratch/project_1/a{char}b")
 
 
 @pytest.mark.parametrize(

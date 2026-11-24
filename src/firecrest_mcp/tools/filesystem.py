@@ -2,6 +2,7 @@
 
 import posixpath
 import re
+from stat import S_ISDIR
 from typing import Annotated
 
 from fastmcp.exceptions import ToolError
@@ -64,8 +65,8 @@ class FirecrestFilesystemToolsMixin:
         first_lines: Annotated[int | None, "return only the first N lines"] = None,
         last_lines: Annotated[int | None, "return only the last N lines"] = None,
     ) -> str:
-        """Read a text file: the whole file (up to 5 MB), or only its first or last
-        lines.
+        """Read a text file: the whole file, up to the system's max_ops_file_size from
+        the systems tool, or only its first or last lines.
         """
         load_config().check_remote_paths(path)
         if first_lines is not None and last_lines is not None:
@@ -254,14 +255,27 @@ class FirecrestFilesystemToolsMixin:
         self,
         system_name: SystemName,
         path: RemotePath,
+        recursive: Annotated[
+            bool, "must be true to delete a directory, which deletes everything in it"
+        ] = False,
         account: TransferAccount = None,
         blocking: Blocking = True,
         timeout: Timeout = None,
     ) -> dict | None:
-        """Delete a file. FirecREST first tries to delete it directly, and if that
-        times out, it deletes it in a transfer job.
+        """Delete a file, or a directory with everything in it if recursive is true.
+        FirecREST first tries to delete it directly, and if that times out, it deletes
+        it in a transfer job.
         """
         account = load_config().checked_transfer(account, path)
+        # FirecREST always deletes a directory with everything in it, so a directory
+        # needs recursive=True. With dereference=False, a symlink counts as a file,
+        # and rm deletes the link, not what it points to.
+        file_stat = self.client.stat(system_name, path=path, dereference=False)
+        if S_ISDIR(file_stat["mode"]) and not recursive:
+            raise ToolError(
+                f"{path!r} is a directory. Pass recursive=True to delete it with"
+                " everything in it."
+            )
         return self.client.rm(
             system_name,
             path=path,
@@ -295,12 +309,12 @@ class FirecrestFilesystemToolsMixin:
         if filename == "" or "/" in filename:
             raise ToolError(f"Filename {filename!r} must not be empty or contain '/'.")
         config = load_config()
-        config.check_local_paths(local_file)
+        real_local_file = config.checked_local_path(local_file)
         account = config.checked_transfer(account, posixpath.join(directory, filename))
         self._use_direct_transfer_limit(system_name)
         transfer = self.client.upload(
             system_name,
-            local_file=local_file,
+            local_file=real_local_file,
             directory=directory,
             filename=filename,
             account=account,
@@ -334,13 +348,13 @@ class FirecrestFilesystemToolsMixin:
         information is returned.
         """
         config = load_config()
-        config.check_local_paths(target_path)
+        real_target_path = config.checked_local_path(target_path)
         account = config.checked_transfer(account, source_path)
         self._use_direct_transfer_limit(system_name)
         transfer = self.client.download(
             system_name,
             source_path=source_path,
-            target_path=target_path,
+            target_path=real_target_path,
             account=account,
             # With False, pyfirecrest leaves the transfer of a file too large for a
             # direct transfer unfinished, as in upload.
