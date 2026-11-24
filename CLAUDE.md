@@ -66,7 +66,9 @@ read once per call. Tools check all of their checked arguments before calling th
 client:
 
 - `load_config().check_remote_paths(*paths)` for remote paths.
-- `load_config().check_local_paths(*paths)` for local paths.
+- `load_config().check_local_paths(*paths)` for local paths. `load_config()` needs a
+  valid table for this cluster, so even a tool that only checks local paths is refused
+  without one.
 - `Config.checked_account(account)` for accounts. It returns `default_account` for
   `None`. Pass the result on to the client. Tools that may run a transfer job call
   `checked_transfer(account, *paths)`, which checks both.
