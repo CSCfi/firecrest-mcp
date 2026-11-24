@@ -78,7 +78,7 @@ TOOLS_RESTRICTED = [
 ]
 
 # Tools with no argument that the config restricts, with the same fields as
-# TOOLS_RESTRICTED. test_every_tool_is_listed fails for a tool in neither list.
+# TOOLS_RESTRICTED. test_every_mixin_tool_is_listed fails for a tool in neither list.
 TOOLS_NOT_RESTRICTED = [
     ("systems", [], [], {}),
     ("partitions", [], [], {}),
@@ -189,9 +189,10 @@ def ids(entries):
     return result
 
 
-def test_every_tool_is_listed():
-    """A new tool must be added to TOOLS_RESTRICTED or to TOOLS_NOT_RESTRICTED. The
-    tools are listed as server.py registers them: every public method with @tool()."""
+def test_every_mixin_tool_is_listed():
+    """A new mixin tool must be added to TOOLS_RESTRICTED or to TOOLS_NOT_RESTRICTED.
+    The tools are listed as server.py registers them: every public method with @tool().
+    test_registered_tools in tests/test_server.py covers the clientless tools."""
 
     tools = set()
     for name in dir(Tools):
