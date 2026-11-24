@@ -591,7 +591,7 @@ def test_show_config_rereads_file(config):
     ("content", "error"),
     [
         ("[roihu]\n", r"no \[lumi\] table"),
-        ("local_paths = 'data'\n[lumi]\n", "local_paths must be a list of strings"),
+        ("local_paths = 'data'\n[lumi]\n", "local_paths: Input should be a valid list"),
     ],
 )
 def test_show_config_invalid(config, content, error):

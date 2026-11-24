@@ -168,7 +168,7 @@ def test_local_denied(local, path):
 def test_local_home_expanded(config, tmp_path, monkeypatch):
     """A "~" in local_paths and in paths means the home directory."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    config('local_paths = ["~/data"]\n')
+    config('local_paths = ["~/data"]\n[lumi]\n')
     check_local_paths("~/data/x", tmp_path / "home" / "data" / "x")
     with pytest.raises(ToolError, match="is not in local_paths"):
         check_local_paths("~/other")
@@ -189,29 +189,35 @@ def test_local_protected(config, path):
     """Server and agent configuration and the token file are never allowed, even
     below local_paths. The config fixture puts the token file at "token" in the
     working directory."""
-    config('local_paths = ["."]\n')
+    config('local_paths = ["."]\n[lumi]\n')
     with pytest.raises(ToolError, match="is protected"):
         check_local_paths(path)
 
 
 def test_local_missing_key_denies_everything(config):
     """Without local_paths, no local path is allowed."""
-    config("")
+    config("[lumi]\n")
     with pytest.raises(ToolError, match="is not in local_paths"):
         check_local_paths("file")
 
 
-@pytest.mark.parametrize("content", ["local_paths = 'data'", "local_paths = [1]"])
-def test_local_paths_must_be_strings(config, content):
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        ("local_paths = 'data'", "local_paths: Input should be a valid list"),
+        ("local_paths = [1]", r"local_paths\.0: Input should be a valid string"),
+    ],
+)
+def test_local_paths_must_be_strings(config, content, error):
     """A local_paths that isn't a list of strings is a config error."""
-    config(content)
-    with pytest.raises(ToolError, match="local_paths must be a list of strings"):
+    config(content + "\n[lumi]\n")
+    with pytest.raises(ToolError, match=error):
         check_local_paths("data")
 
 
 def test_local_paths_empty_entry(config):
     """An empty string in local_paths is a config error, so it can't allow the
     working directory by mistake."""
-    config('local_paths = ["data", ""]\n')
+    config('local_paths = ["data", ""]\n[lumi]\n')
     with pytest.raises(ToolError, match="must not contain an empty string"):
         check_local_paths("data")

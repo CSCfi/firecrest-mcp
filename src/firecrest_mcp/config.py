@@ -12,6 +12,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -211,53 +212,71 @@ def _read_config() -> dict:
     return data
 
 
-def load_cluster_config() -> ClusterConfig:
-    """Return the config for this server's cluster. Other clusters' tables are not
-    read."""
+class Config(BaseModel):
+    """What the tools may do on this server: the top-level local_paths and the table of
+    this server's cluster."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    local_paths: list[str]
+    cluster: ClusterConfig
+
+    @field_validator("local_paths")
+    @classmethod
+    def _check_local_path_entries(cls, entries: list[str]) -> list[str]:
+        # Path("") is the working directory, so an empty entry would allow all of it.
+        if "" in entries:
+            raise ValueError("must not contain an empty string")
+        return entries
+
+    def check_local_paths(self, *paths: str | os.PathLike | None) -> None:
+        """Raise a ToolError unless every given local path is one of the local_paths
+        or lies below one. The paths from _protected_local_paths() are refused even
+        there. Relative entries and paths are relative to the working directory, and
+        both are resolved, following symlinks, before they are compared. ``None``
+        values are skipped."""
+        allowed = [Path(entry).expanduser().resolve() for entry in self.local_paths]
+        protected = _protected_local_paths()
+        for path in paths:
+            if path is None:
+                continue
+            resolved = Path(path).expanduser().resolve()
+            if any(resolved.is_relative_to(p) for p in protected):
+                raise ToolError(f"Local path {str(path)!r} is protected.")
+            if not any(resolved.is_relative_to(d) for d in allowed):
+                raise _not_allowed("Local path", str(path), "local_paths")
+
+
+def load_config() -> Config:
+    """Return the config for this server. Other clusters' tables are not read."""
     data = _read_config()
     name = cluster_name()
     if name not in data:
         raise _config_error(f"there is no [{name}] table, so nothing is allowed.")
+    # Without local_paths, no local path is allowed.
+    fields = {"local_paths": data.get("local_paths", []), "cluster": data[name]}
     try:
-        return ClusterConfig.model_validate(data[name])
+        return Config.model_validate(fields)
     except ValidationError as e:
         problems = []
         for err in e.errors():
-            # loc is the path to the bad value inside the table, e.g.
-            # ("remote_paths", 0).
-            parts = [name]
+            # loc is the path to the bad value, e.g. ("cluster", "remote_paths", 0).
+            # The cluster's table is named as in the file, e.g. lumi.remote_paths.0.
+            parts = []
             for part in err["loc"]:
                 parts.append(str(part))
+            if parts[0] == "cluster":
+                parts[0] = name
             location = ".".join(parts)
             problems.append(f"{location}: {err['msg']}")
         raise _config_error("; ".join(problems)) from None
 
 
-def _local_path_entries() -> list[str]:
-    """Return the top-level local_paths as written in the config file."""
-    # Without local_paths, no local path is allowed.
-    entries = _read_config().get("local_paths", [])
-    if not isinstance(entries, list) or not all(isinstance(e, str) for e in entries):
-        raise _config_error("local_paths must be a list of strings.")
-    # Path("") is the working directory, so an empty entry would allow all of it.
-    if "" in entries:
-        raise _config_error("local_paths must not contain an empty string.")
-    return entries
+def load_cluster_config() -> ClusterConfig:
+    """Return the config for this server's cluster."""
+    return load_config().cluster
 
 
 def check_local_paths(*paths: str | os.PathLike | None) -> None:
-    """Raise a ToolError unless every given local path is one of the top-level
-    local_paths or lies below one. The paths from _protected_local_paths() are
-    refused even there. Relative entries and paths are relative to the
-    working directory, and both are resolved, following symlinks, before they are
-    compared. ``None`` values are skipped."""
-    allowed = [Path(entry).expanduser().resolve() for entry in _local_path_entries()]
-    protected = _protected_local_paths()
-    for path in paths:
-        if path is None:
-            continue
-        resolved = Path(path).expanduser().resolve()
-        if any(resolved.is_relative_to(p) for p in protected):
-            raise ToolError(f"Local path {str(path)!r} is protected.")
-        if not any(resolved.is_relative_to(d) for d in allowed):
-            raise _not_allowed("Local path", str(path), "local_paths")
+    """Check local paths with Config.check_local_paths."""
+    load_config().check_local_paths(*paths)
