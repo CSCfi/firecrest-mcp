@@ -12,7 +12,6 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     ValidationError,
-    field_validator,
     model_validator,
 )
 
@@ -58,6 +57,13 @@ def _require_default(option: str, value: str | None) -> str:
             f" {CONFIG_PATH.absolute()}."
         )
     return value
+
+
+def _check_local_syntax(path: str) -> str:
+    # Path("") is the working directory, so an empty entry would allow all of it.
+    if path == "":
+        raise ValueError("must not be an empty string")
+    return path
 
 
 def _check_remote_syntax(path: str) -> str:
@@ -111,7 +117,7 @@ class Config(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    local_paths: list[str]
+    local_paths: list[Annotated[str, AfterValidator(_check_local_syntax)]]
     remote_paths: list[Annotated[str, AfterValidator(_check_remote_syntax)]] = []
     accounts: list[str] = []
     default_account: str | None = None
@@ -129,14 +135,6 @@ class Config(BaseModel):
             if default is not None and default not in allowed:
                 raise ValueError(f"default_{option} {default!r} is not in {option}s")
         return self
-
-    @field_validator("local_paths")
-    @classmethod
-    def _check_local_path_entries(cls, entries: list[str]) -> list[str]:
-        # Path("") is the working directory, so an empty entry would allow all of it.
-        if "" in entries:
-            raise ValueError("must not contain an empty string")
-        return entries
 
     def check_local_paths(self, *paths: str | os.PathLike | None) -> None:
         """Raise a ToolError unless every given local path is one of the local_paths

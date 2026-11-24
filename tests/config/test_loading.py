@@ -216,5 +216,7 @@ def test_local_paths_empty_entry(config):
     """An empty string in local_paths is a config error, so it can't allow the
     working directory by mistake."""
     config('local_paths = ["data", ""]\n[lumi]\n')
-    with pytest.raises(ToolError, match="must not contain an empty string"):
+    with pytest.raises(
+        ToolError, match=r"local_paths\.1: .*must not be an empty string"
+    ):
         load_config().check_local_paths("data")
