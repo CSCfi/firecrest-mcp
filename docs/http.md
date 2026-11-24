@@ -28,8 +28,10 @@ The upload, download and submit tools use paths outside the container. Mount the
 project into the container at the same path, so that a path the agent gives the server
 means the same file on both sides.
 
-The server listens only on `127.0.0.1`, so any process on the workstation can connect
-to the port and use the tools with your token, within the limits of the config.
+The server listens only on `127.0.0.1` and doesn't ask for a password or key. Any
+process on the workstation can connect to the port and use the tools with your token,
+including the processes of other users on a shared machine. The config limits most
+tools, but `submit` and `attach_to_job` run any command on the cluster as you.
 
 A container can't reach the workstation's `127.0.0.1` by default. Don't set
 `--host 0.0.0.0` to let the container in, because other machines could then do the
