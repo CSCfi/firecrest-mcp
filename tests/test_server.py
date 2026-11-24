@@ -13,6 +13,10 @@ from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
 
+# Tools in tools/clientless.py, which server.py registers by name. None of them
+# takes an argument that .firecrest-mcp.toml restricts.
+CLIENTLESS_TOOLS = {"show_config"}
+
 
 @pytest.fixture(autouse=True)
 def no_github_request(monkeypatch):
@@ -29,8 +33,8 @@ def server(monkeypatch):
 
 
 def test_registered_tools(server):
-    """The server registers every tool of the three mixins, the config tool and
-    nothing else. The list of the mixins' tools is tested in
+    """The server registers every tool of the three mixins, the CLIENTLESS_TOOLS
+    and nothing else. The list of the mixins' tools is tested in
     tests/config/test_tools.py."""
     mixins = [
         FirecrestComputeToolsMixin,
@@ -46,7 +50,11 @@ def test_registered_tools(server):
             if get_fastmcp_meta(getattr(mixin, name)) is not None:
                 expected.add(name)
     tools = asyncio.run(server.mcp.list_tools())
-    assert {tool.name for tool in tools} == expected | {"config"}
+    assert {tool.name for tool in tools} == expected | CLIENTLESS_TOOLS, (
+        "Add a new tool in tools/clientless.py to CLIENTLESS_TOOLS. If it takes an"
+        " argument that .firecrest-mcp.toml restricts, check it with load_config()"
+        " and test that a denied value is refused."
+    )
 
 
 def test_instructions(server):

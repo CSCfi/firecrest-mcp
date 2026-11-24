@@ -11,8 +11,9 @@ from fastmcp.decorators import get_fastmcp_meta
 from firecrest.v2 import Firecrest
 
 from firecrest_mcp.auth import TokenAuth
-from firecrest_mcp.config import active_config, cluster_name
+from firecrest_mcp.config import cluster_name
 from firecrest_mcp.metadata import get_server_metadata, get_update_message
+from firecrest_mcp.tools.clientless import show_config
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
@@ -82,4 +83,4 @@ for name in dir(fc):
         mcp.add_tool(method)
 
 # Tools that don't use the FirecREST client are registered here.
-mcp.tool(active_config, name="config")
+mcp.add_tool(show_config)

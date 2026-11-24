@@ -25,10 +25,11 @@ An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
 (`firecrest.v2.Firecrest`) to expose HPC file and Slurm operations on CSC systems.
 One server process serves one cluster, chosen by `FIRECREST_URL`.
 
-- **Tool registration** (`server.py`): tools are `@tool()` methods on the mixins in
-  `tools/`, which `FirecrestClientWrapper` combines. `server.py` registers every public
-  `@tool()` method of the wrapper. It also registers `active_config()` from `config.py`
-  as the `config` tool, which doesn't call FirecREST.
+- **Tool registration** (`server.py`): tools that call FirecREST are `@tool()` methods
+  on the mixins in `tools/`, which `FirecrestClientWrapper` combines. Tools that don't,
+  such as `show_config`, are `@tool()` functions in `tools/clientless.py`. `server.py`
+  registers every public `@tool()` method of the wrapper, and each of those functions
+  by name.
 - **Tests through FastMCP**: most tool tests call the mixin methods directly, which
   skips FastMCP's checks of the arguments, such as the patterns in `tools/params.py`,
   and its conversion of the result. Use `call_through_mcp` in
@@ -59,20 +60,24 @@ One server process serves one cluster, chosen by `FIRECREST_URL`.
 
 ### Config file
 
-`config.py` reads `.firecrest-mcp.toml` on every call and fails closed. Tools check all
-of their checked arguments before calling the client:
+`config.py` reads `.firecrest-mcp.toml` on every call to `load_config()` and fails
+closed. A tool with several checks starts with `config = load_config()`, so the file is
+read once per call. Tools check all of their checked arguments before calling the
+client:
 
-- `load_cluster_config().check_remote_paths(*paths)` for remote paths.
-- `check_local_paths(*paths)` for local paths.
-- `ClusterConfig.checked_account(account)` for accounts. It returns
-  `default_account` for `None`. Pass the result on to the client. Tools that may run
-  a transfer job call `checked_transfer(account, *paths)`, which checks both.
-- `ClusterConfig.check_group(group)` for `chgrp`.
+- `load_config().check_remote_paths(*paths)` for remote paths.
+- `load_config().check_local_paths(*paths)` for local paths. `load_config()` needs a
+  valid table for this cluster, so even a tool that only checks local paths is refused
+  without one.
+- `Config.checked_account(account)` for accounts. It returns `default_account` for
+  `None`. Pass the result on to the client. Tools that may run a transfer job call
+  `checked_transfer(account, *paths)`, which checks both.
+- `Config.check_group(group)` for `chgrp`.
 - `own_jobs(client, system_name, jobs, jobid)` in `tools/compute.py` for job queries,
   and `check_own_job(client, system_name, jobid)` for tools that act on a job by ID,
   because FirecREST returns any user's job by ID.
-- `ClusterConfig.checked_job_options` for `submit`. Pass the account and partition it
-  returns to the client, because they override the script's `#SBATCH` lines.
+- `Config.checked_job_options` for `submit`. Pass the account and partition it returns
+  to the client, because they override the script's `#SBATCH` lines.
 
 When changing a tool's checked parameters, update `TOOLS_RESTRICTED` and
 `TOOLS_WITH_ACCOUNT` in `tests/config/test_tools.py`. A new tool goes into

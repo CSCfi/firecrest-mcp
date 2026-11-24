@@ -123,7 +123,7 @@ Status tools, and job tools other than the `submit` tool, work without a config,
 they only read the cluster's status or act on your own jobs, with no paths or accounts
 to check.
 
-The `config` tool shows the agent the parts of the config that its server applies:
+The `show_config` tool shows the agent the parts of the config that its server applies:
 `local_paths` and the cluster's table, with every key. It fails, like the other tools,
 when the config is missing or invalid.
 

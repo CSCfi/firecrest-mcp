@@ -44,9 +44,10 @@ allow is denied. The server for a cluster reads only that cluster's table, so it
 applies another cluster's lists, and a mistake in another table doesn't affect it.
 `local_paths` is a top-level list that applies to all clusters.
 
-The `config` tool returns the parts of the file that its server applies, `local_paths`
-and the cluster's table, with every key and an empty list or null for a missing one. It
-fails with the same error as the other tools when the file is missing or invalid.
+The `show_config` tool returns the parts of the file that its server applies,
+`local_paths` and the cluster's table, with every key and an empty list or null for a
+missing one. It fails with the same error as the other tools when the file is missing
+or invalid.
 
 ## Local paths
 

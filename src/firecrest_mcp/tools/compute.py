@@ -10,7 +10,7 @@ from fastmcp.tools import tool
 from firecrest import UnexpectedStatusException
 from firecrest.v2 import Firecrest
 
-from firecrest_mcp.config import check_local_paths, load_cluster_config
+from firecrest_mcp.config import load_config
 from firecrest_mcp.tools.params import JobId, SystemName
 
 # Seconds that _user_name keeps the user's name. The name changes only if the token
@@ -82,12 +82,10 @@ class FirecrestComputeToolsMixin:
                 "Exactly one of script_str, script_local_path or script_remote_path"
                 " must be given."
             )
-        cluster = load_cluster_config()
-        cluster.check_remote_paths(working_dir, script_remote_path)
-        check_local_paths(script_local_path)
-        account, partition = cluster.checked_job_options(
-            account, partition, reservation
-        )
+        config = load_config()
+        config.check_remote_paths(working_dir, script_remote_path)
+        config.check_local_paths(script_local_path)
+        account, partition = config.checked_job_options(account, partition, reservation)
         result = self.client.submit(
             system_name,
             working_dir=working_dir,
@@ -179,7 +177,7 @@ class FirecrestComputeToolsMixin:
         the job's. FirecREST kills it after the time limit that the systems tool
         shows as ssh.timeout.commandExecution.
         """
-        load_cluster_config().check_remote_paths(output_path)
+        load_config().check_remote_paths(output_path)
         check_own_job(self.client, system_name, jobid)
         # FirecREST runs "srun ... <command>" in a login node shell, which would run
         # anything after a ";" itself. bash -c keeps the whole command in the job.

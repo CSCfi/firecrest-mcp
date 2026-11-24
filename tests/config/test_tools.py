@@ -1,6 +1,6 @@
 """Tests for the tools with a mock client: that every tool checks its arguments, that
 every tool works when it is called through FastMCP, and the behaviour of submit,
-read_file, chgrp, upload and download.
+read_file, chgrp, upload, download and show_config.
 """
 
 import asyncio
@@ -11,6 +11,7 @@ from fastmcp.decorators import get_fastmcp_meta
 from fastmcp.exceptions import ToolError
 from firecrest.v2 import ExternalDownload, ExternalUpload
 
+from firecrest_mcp.tools.clientless import show_config
 from firecrest_mcp.tools.compute import FirecrestComputeToolsMixin
 from firecrest_mcp.tools.filesystem import FirecrestFilesystemToolsMixin
 from firecrest_mcp.tools.status import FirecrestStatusToolsMixin
@@ -77,7 +78,7 @@ TOOLS_RESTRICTED = [
 ]
 
 # Tools with no argument that the config restricts, with the same fields as
-# TOOLS_RESTRICTED. test_every_tool_is_listed fails for a tool in neither list.
+# TOOLS_RESTRICTED. test_every_mixin_tool_is_listed fails for a tool in neither list.
 TOOLS_NOT_RESTRICTED = [
     ("systems", [], [], {}),
     ("partitions", [], [], {}),
@@ -153,18 +154,18 @@ def call(tools, name, remote_args, local_args, other_args, **overrides):
     return getattr(tools, name)("lumi", **arguments)
 
 
-def call_through_mcp(tools, name, arguments):
+def call_through_mcp(tool, arguments):
     """Call a tool the way an agent does: an MCP client sends the arguments to a
     FastMCP server. FastMCP checks them against the tool's parameter types and turns
     the tool's result into a response, which a direct call skips. If either step or
     the tool fails, this raises a ToolError."""
     server = FastMCP("test")
-    server.add_tool(getattr(tools, name))
+    server.add_tool(tool)
 
     # The client is async, so the call is put in a coroutine that asyncio runs.
     async def run():
         async with Client(server) as client:
-            return await client.call_tool(name, arguments)
+            return await client.call_tool(tool.__name__, arguments)
 
     return asyncio.run(run())
 
@@ -188,9 +189,10 @@ def ids(entries):
     return result
 
 
-def test_every_tool_is_listed():
-    """A new tool must be added to TOOLS_RESTRICTED or to TOOLS_NOT_RESTRICTED. The
-    tools are listed as server.py registers them: every public method with @tool()."""
+def test_every_mixin_tool_is_listed():
+    """A new mixin tool must be added to TOOLS_RESTRICTED or to TOOLS_NOT_RESTRICTED.
+    The tools are listed as server.py registers them: every public method with @tool().
+    test_registered_tools in tests/test_server.py covers the clientless tools."""
 
     tools = set()
     for name in dir(Tools):
@@ -215,7 +217,7 @@ def test_tool_works_through_fastmcp(tools, name, remote_args, local_args, other_
     # systems is the only tool without a system_name.
     if name != "systems":
         arguments["system_name"] = "lumi"
-    call_through_mcp(tools, name, arguments)
+    call_through_mcp(getattr(tools, name), arguments)
     client_method(tools, name).assert_called_once()
 
 
@@ -237,7 +239,7 @@ def test_system_name_pattern(tools, name, arguments):
     refused before the client is called."""
     arguments["system_name"] = TRAVERSAL_SYSTEM_NAME
     with pytest.raises(ToolError, match="String should match pattern"):
-        call_through_mcp(tools, name, arguments)
+        call_through_mcp(getattr(tools, name), arguments)
     client_method(tools, name).assert_not_called()
 
 
@@ -260,7 +262,7 @@ def test_jobid_pattern(tools, name, arguments, jobid):
     arguments["system_name"] = "lumi"
     arguments["jobid"] = jobid
     with pytest.raises(ToolError, match="String should match pattern"):
-        call_through_mcp(tools, name, arguments)
+        call_through_mcp(getattr(tools, name), arguments)
     tools.client.job_info.assert_not_called()
     client_method(tools, name).assert_not_called()
 
@@ -371,7 +373,7 @@ TRANSFER_INFO = {
 def test_transfer_returns_only_the_job(tools, name, transfer, arguments):
     """upload and download return the transfer job without the signed URLs."""
     client_method(tools, name).return_value = transfer
-    result = call_through_mcp(tools, name, arguments)
+    result = call_through_mcp(getattr(tools, name), arguments)
     assert result.data == TRANSFER_JOB
 
 
@@ -390,7 +392,7 @@ def test_transfer_waits_for_the_data(tools, name, remote_args, local_args, other
     arguments["system_name"] = "lumi"
     arguments["blocking"] = False
     with pytest.raises(ToolError, match="Unexpected keyword argument"):
-        call_through_mcp(tools, name, arguments)
+        call_through_mcp(getattr(tools, name), arguments)
 
 
 @pytest.mark.parametrize(
@@ -491,7 +493,7 @@ def test_submit_needs_working_dir(tools):
     """submit refuses a job without a working directory, which FirecREST requires."""
     arguments = {"system_name": "lumi", "working_dir": None, "script_str": "x"}
     with pytest.raises(ToolError, match="working_dir"):
-        call_through_mcp(tools, "submit", arguments)
+        call_through_mcp(tools.submit, arguments)
     tools.client.submit.assert_not_called()
 
 
@@ -559,3 +561,44 @@ def test_chmod_mode_must_be_numeric(tools, mode):
     with pytest.raises(ToolError, match="is not a numeric mode"):
         tools.chmod("lumi", ALLOWED_REMOTE_PATH, mode)
     tools.client.chmod.assert_not_called()
+
+
+def test_show_config(config):
+    """show_config returns local_paths and this cluster's table with every key,
+    through FastMCP."""
+    config('local_paths = ["data"]\n[lumi]\naccounts = ["p"]\n[roihu]\n')
+    assert call_through_mcp(show_config, {}).data == {
+        "local_paths": ["data"],
+        "lumi": {
+            "remote_paths": [],
+            "accounts": ["p"],
+            "default_account": None,
+            "partitions": [],
+            "default_partition": None,
+            "reservations": [],
+            "groups": [],
+        },
+    }
+
+
+def test_show_config_rereads_file(config):
+    """show_config shows edits without a restart."""
+    config("[lumi]\n")
+    assert show_config()["lumi"]["accounts"] == []
+    config('[lumi]\naccounts = ["p"]\n')
+    assert show_config()["lumi"]["accounts"] == ["p"]
+
+
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        ("[roihu]\n", r"no \[lumi\] table"),
+        ("local_paths = 'data'\n[lumi]\n", "local_paths: Input should be a valid list"),
+    ],
+)
+def test_show_config_invalid(config, content, error):
+    """show_config fails with the same error as the other tools when the
+    cluster's table is missing or local_paths is invalid."""
+    config(content)
+    with pytest.raises(ToolError, match=error):
+        show_config()
