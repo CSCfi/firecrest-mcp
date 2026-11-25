@@ -5,8 +5,10 @@ import importlib
 from pathlib import Path
 from unittest.mock import Mock
 
+import httpx
 import pytest
 import requests
+from fastmcp import Client
 from fastmcp.decorators import get_fastmcp_meta
 
 from firecrest_mcp import main, metadata, settings
@@ -176,3 +178,46 @@ def test_main_requires_url(recorded_runs):
     with pytest.raises(SystemExit):
         main([])
     assert recorded_runs == []
+
+
+def test_connect_timeout(server):
+    """The client gives up on connecting to FirecREST after CONNECT_TIMEOUT seconds,
+    but waits for a response without a limit."""
+    expected = httpx.Timeout(
+        connect=server.CONNECT_TIMEOUT, read=None, write=None, pool=None
+    )
+    assert server.fc.client.timeout == expected
+
+
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [
+        (
+            httpx.ConnectTimeout("timed out"),
+            (
+                f"Could not connect to FirecREST at {URL} within 10 seconds."
+                " Check --firecrest-url."
+            ),
+        ),
+        (
+            httpx.ConnectError("Name or service not known"),
+            (
+                f"Could not connect to FirecREST at {URL}: Name or service not known."
+                " Check --firecrest-url."
+            ),
+        ),
+        (RuntimeError("other"), "Error calling tool 'systems': other"),
+    ],
+)
+def test_connection_errors_name_url(server, monkeypatch, error, message):
+    """A tool that can't connect to FirecREST returns an error that names the URL.
+    Other errors are left as FastMCP reports them."""
+    monkeypatch.setattr(server.fc.client, "systems", Mock(side_effect=error))
+
+    async def call_systems():
+        async with Client(server.mcp) as client:
+            return await client.call_tool("systems", {}, raise_on_error=False)
+
+    result = asyncio.run(call_systems())
+    assert result.is_error
+    assert result.content[0].text == message
