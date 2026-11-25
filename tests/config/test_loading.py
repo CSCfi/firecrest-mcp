@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fastmcp.exceptions import ToolError
 
+from firecrest_mcp import settings
 from firecrest_mcp.config import cluster_name, load_config
 
 
@@ -30,7 +31,7 @@ def test_clusters_are_separate(config, monkeypatch):
         '[roihu]\nremote_paths = ["/scratch/project_2"]\n'
     )
     load_config().check_remote_paths("/scratch/project_1/file")
-    monkeypatch.setenv("FIRECREST_URL", "https://api.roihu.csc.fi/v1")
+    monkeypatch.setattr(settings, "firecrest_url", "https://api.roihu.csc.fi/v1")
     load_config().check_remote_paths("/scratch/project_2/file")
     with pytest.raises(ToolError, match="is not in remote_paths"):
         load_config().check_remote_paths("/scratch/project_1/file")
@@ -47,14 +48,14 @@ def test_clusters_are_separate(config, monkeypatch):
 )
 def test_cluster_name(monkeypatch, url, name):
     """The cluster name is the first hostname label other than "api"."""
-    monkeypatch.setenv("FIRECREST_URL", url)
+    monkeypatch.setattr(settings, "firecrest_url", url)
     assert cluster_name() == name
 
 
 @pytest.mark.parametrize("url", ["", "https://api/v1", "not a url"])
 def test_cluster_name_underivable(monkeypatch, url):
     """A URL without a usable hostname is refused."""
-    monkeypatch.setenv("FIRECREST_URL", url)
+    monkeypatch.setattr(settings, "firecrest_url", url)
     with pytest.raises(ToolError, match="Cannot derive a cluster name"):
         cluster_name()
 
@@ -101,7 +102,7 @@ def test_example_config_is_valid(config, monkeypatch, url):
     """examples/firecrest-mcp.toml loads for both clusters."""
     example = Path(__file__).parents[2] / "examples" / "firecrest-mcp.toml"
     config(example.read_text())
-    monkeypatch.setenv("FIRECREST_URL", url)
+    monkeypatch.setattr(settings, "firecrest_url", url)
     assert load_config().remote_paths
 
 
@@ -116,19 +117,19 @@ def test_changes_apply_without_reload(config):
 
 @pytest.fixture
 def outside_config(config, tmp_path, monkeypatch):
-    """Point FIRECREST_MCP_CONFIG_PATH at a file outside the working directory, and
+    """Point --config at a file outside the working directory, and
     return the file's path. The project's .firecrest-mcp.toml allows only "other"."""
     project = tmp_path / "project"
     project.mkdir()
     monkeypatch.chdir(project)
     (project / ".firecrest-mcp.toml").write_text('local_paths = ["other"]\n[lumi]\n')
     path = tmp_path / "outside.toml"
-    monkeypatch.setenv("FIRECREST_MCP_CONFIG_PATH", str(path))
+    monkeypatch.setattr(settings, "config_file", path)
     return path
 
 
-def test_variable_replaces_project_file(outside_config):
-    """The file that FIRECREST_MCP_CONFIG_PATH names is read, and the project's file
+def test_option_replaces_project_file(outside_config):
+    """The file that --config names is read, and the project's file
     is ignored. Relative local_paths entries are relative to the working directory,
     not to the file."""
     outside_config.write_text('local_paths = ["data"]\n[lumi]\n')
@@ -139,16 +140,16 @@ def test_variable_replaces_project_file(outside_config):
         load_config().checked_local_path("other/x")
 
 
-def test_variable_with_missing_file(outside_config):
-    """A missing file that the variable names allows nothing, even though the
+def test_option_with_missing_file(outside_config):
+    """A missing file that --config names allows nothing, even though the
     project has a config file."""
     with pytest.raises(ToolError, match=re.escape(f"{outside_config}: does not exist")):
         load_config()
 
 
 @pytest.mark.parametrize("path", ["../outside.toml", ".firecrest-mcp.toml"])
-def test_variable_file_is_protected(outside_config, tmp_path, path):
-    """The file that the variable names is protected, even below local_paths, and so
+def test_option_file_is_protected(outside_config, tmp_path, path):
+    """The file that --config names is protected, even below local_paths, and so
     is the project's ignored file."""
     outside_config.write_text(f'local_paths = ["{tmp_path}"]\n[lumi]\n')
     with pytest.raises(ToolError, match="is protected"):

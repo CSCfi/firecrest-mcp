@@ -8,10 +8,11 @@ them read.
 
 ## Token
 
-The server reads the token from `~/.firecrest-token`, or from `FIRECREST_TOKEN_PATH`, on
-every request. Like ssh with a private key, it refuses the file if anyone but the user
-can access it. It also refuses an empty or expired token. It checks only the token's
-`exp` claim, not its signature. FirecREST checks the token itself.
+The server reads the token from `~/.firecrest-token`, or from the file that
+`--token-file` names, on every request. Like ssh with a private key, it refuses the
+file if anyone but the user can access it. It also refuses an empty or expired token.
+It checks only the token's `exp` claim, not its signature. FirecREST checks the token
+itself.
 
 ## Tools
 
@@ -69,8 +70,8 @@ Overwriting the config file with `download` would widen what the tools may do, a
 repository or add a hook that git runs. The server refuses these paths even if
 `local_paths` allows them:
 
-- the config file `.firecrest-mcp.toml`, and the file that `FIRECREST_MCP_CONFIG_PATH`
-  names if it is set,
+- the config file `.firecrest-mcp.toml`, and the file that `--config` names if it is
+  given,
 - the token file,
 - `.git/` in the project directory.
 
@@ -147,7 +148,9 @@ account before giving it a token:
 - **Editing `.firecrest-mcp.toml` with its own file tools**, which would undo every
   safeguard above. The server's instructions tell the agent not to, but only the
   agent's own permission settings can stop it. The
-  [README](../README.md#agent-permissions) has an example for Claude Code.
+  [README](../README.md#agent-permissions) has an example for Claude Code. An agent in
+  a container can't reach a config outside the project that the server reads with
+  `--config`, as [Connecting over HTTP](http.md) describes.
 - Sending any file in `local_paths` to the cluster, or overwriting one with
   `download`. Only the config files, the token file and `.git/` are protected.
 - Following a symlink on the cluster from inside `remote_paths` to outside it.

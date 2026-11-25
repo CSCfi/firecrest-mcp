@@ -5,6 +5,7 @@ import time
 import jwt
 import pytest
 
+from firecrest_mcp import settings
 from firecrest_mcp.auth import TokenAuth
 
 # Long enough that PyJWT doesn't warn about the HMAC key length.
@@ -20,10 +21,9 @@ VALID = make_token(exp=time.time() + 3600)
 
 @pytest.fixture
 def token_file(tmp_path, monkeypatch):
-    """Return a function that writes the token file that FIRECREST_TOKEN_PATH
-    points at."""
+    """Return a function that writes the token file that --token-file names."""
     path = tmp_path / "token"
-    monkeypatch.setenv("FIRECREST_TOKEN_PATH", str(path))
+    monkeypatch.setattr(settings, "token_file", path)
 
     def write(content: str, mode: int = 0o600):
         path.write_text(content)
@@ -35,16 +35,6 @@ def token_file(tmp_path, monkeypatch):
 def test_valid_token(token_file):
     """A valid token is returned without surrounding whitespace."""
     token_file(f"\n{VALID}\n")
-    assert TokenAuth().get_access_token() == VALID
-
-
-def test_default_path(tmp_path, monkeypatch):
-    """Without FIRECREST_TOKEN_PATH, the token is read from ~/.firecrest-token."""
-    monkeypatch.delenv("FIRECREST_TOKEN_PATH", raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    path = tmp_path / ".firecrest-token"
-    path.write_text(VALID)
-    path.chmod(0o600)
     assert TokenAuth().get_access_token() == VALID
 
 

@@ -1,8 +1,7 @@
 """The MCP server: the FirecREST client and the tools of one cluster, chosen by
-FIRECREST_URL.
+--firecrest-url.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from fastmcp import FastMCP
 from fastmcp.decorators import get_fastmcp_meta
 from firecrest.v2 import Firecrest
 
+from firecrest_mcp import settings
 from firecrest_mcp.auth import TokenAuth
 from firecrest_mcp.config import cluster_name
 from firecrest_mcp.metadata import get_server_metadata, get_update_message
@@ -31,11 +31,11 @@ class FirecrestClientWrapper(
         )
 
 
-url = os.getenv("FIRECREST_URL", None)
-if not url:
-    raise RuntimeError("Environment variable FIRECREST_URL is not defined.")
+# main() sets the URL before it imports this module.
+if not settings.firecrest_url:
+    raise RuntimeError("No --firecrest-url given.")
 
-fc = FirecrestClientWrapper(url)
+fc = FirecrestClientWrapper(settings.firecrest_url)
 
 
 server_metadata = get_server_metadata()

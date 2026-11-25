@@ -15,7 +15,7 @@ uv run pre-commit run --all-files              # all pre-commit hooks
 The pre-commit hooks only check, so run `uv run ruff format` by hand when the format
 hook fails.
 
-Running the server needs `FIRECREST_URL` and a token file, as the README's Setup
+Running the server needs `--firecrest-url` and a token file, as the README's Setup
 section says. `dev/mcp-stdio.json` and `dev/mcp-http.json` run the checked-out code.
 They pick up code changes only after a restart of Claude Code or of the HTTP servers.
 
@@ -23,7 +23,7 @@ They pick up code changes only after a restart of Claude Code or of the HTTP ser
 
 An MCP server (FastMCP) that wraps the `pyfirecrest` v2 client
 (`firecrest.v2.Firecrest`) to expose HPC file and Slurm operations on CSC systems.
-One server process serves one cluster, chosen by `FIRECREST_URL`.
+One server process serves one cluster, chosen by `--firecrest-url`.
 
 - **Tool registration** (`server.py`): tools that call FirecREST are `@tool()` methods
   on the mixins in `tools/`, which `FirecrestClientWrapper` combines. Tools that don't,
@@ -38,10 +38,13 @@ One server process serves one cluster, chosen by `FIRECREST_URL`.
   keyword. pyfirecrest's untyped `_with_correlation_id` decorator hides their
   signatures from ty, so only the names catch a wrong argument. The tests' mock
   client is a `create_autospec(Firecrest)`, which rejects unknown names.
-- **Import-time side effects**: `server.py` reads `FIRECREST_URL` and raises if it's
-  missing, so tests import the mixins (or `auth`) directly with a mock `client` rather
-  than importing `server`. Only `tests/test_server.py` imports it, after setting
-  `FIRECREST_URL`.
+- **Settings**: `main()` in `__init__.py` puts `--firecrest-url`, `--token-file` and
+  `--config` into the module `settings.py`, which the rest of the code reads on each
+  use. Tests set them with `monkeypatch.setattr(settings, ...)`.
+- **Import-time side effects**: `server.py` reads `settings.firecrest_url` and raises
+  if it's empty, so tests import the mixins (or `auth`) directly with a mock `client`
+  rather than importing `server`. Only `tests/test_server.py` imports it, after
+  setting the URL.
 - **Instructions**: the FastMCP `instructions` are `context/shared.md`, sent by every
   server, followed by `context/clusters/<cluster>.md` if it exists, where `<cluster>` is
   `cluster_name()`. Each file starts with a `###` header, because Claude Code puts each
@@ -60,10 +63,10 @@ One server process serves one cluster, chosen by `FIRECREST_URL`.
 
 ### Config file
 
-`config.py` reads `.firecrest-mcp.toml` on every call to `load_config()` and fails
-closed. A tool with several checks starts with `config = load_config()`, so the file is
-read once per call. Tools check all of their checked arguments before calling the
-client:
+`config.py` reads the config file, `settings.config_file`, on every call to
+`load_config()` and fails closed. A tool with several checks starts with
+`config = load_config()`, so the file is read once per call. Tools check all of their
+checked arguments before calling the client:
 
 - `load_config().check_remote_paths(*paths)` for remote paths.
 - `load_config().checked_local_path(path)` for local paths. It returns the real path,

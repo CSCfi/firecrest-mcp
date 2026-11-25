@@ -5,6 +5,9 @@ FirecREST.
 import argparse
 import logging
 import sys
+from pathlib import Path
+
+from firecrest_mcp import settings
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
@@ -15,11 +18,31 @@ def main(argv: list[str] | None = None) -> None:
     same workstation.
     """
     parser = argparse.ArgumentParser(prog="firecrest-mcp", description=main.__doc__)
-    parser.add_argument("--transport", choices=["stdio", "http"], default="stdio")
+    parser.add_argument(
+        "-u",
+        "--firecrest-url",
+        required=True,
+        help="URL of the cluster's FirecREST API, e.g. https://api.lumi.csc.fi/v1",
+    )
+    parser.add_argument(
+        "--token-file",
+        default=settings.DEFAULT_TOKEN_FILE,
+        help="file that holds the FirecREST token"
+        f" (default: {settings.DEFAULT_TOKEN_FILE})",
+    )
+    parser.add_argument(
+        "-c",
+        "--config",
+        default=settings.PROJECT_CONFIG_FILE,
+        help="config file, absolute or relative to the working directory"
+        f" (default: {settings.PROJECT_CONFIG_FILE})",
+    )
+    parser.add_argument("-t", "--transport", choices=["stdio", "http"], default="stdio")
     parser.add_argument(
         "--host", help=f"address to listen on over HTTP (default: {DEFAULT_HOST})"
     )
     parser.add_argument(
+        "-p",
         "--port",
         type=int,
         help=f"port to listen on over HTTP (default: {DEFAULT_PORT})",
@@ -46,6 +69,11 @@ def main(argv: list[str] | None = None) -> None:
 
     logging.basicConfig(level=args.log_level)
 
+    # An MCP config passes the arguments without a shell, so "~" is expanded here.
+    settings.firecrest_url = args.firecrest_url
+    settings.token_file = Path(args.token_file).expanduser()
+    settings.config_file = Path(args.config).expanduser()
+
     try:
         run_server(args.transport, args.host, args.port, args.allowed_host)
     except KeyboardInterrupt:
@@ -58,8 +86,8 @@ def run_server(
     transport: str, host: str | None, port: int | None, allowed_hosts: list[str]
 ) -> None:
     """Import the server and run it until it stops."""
-    # Imported here because server.py needs FIRECREST_URL, and --help and option
-    # errors should work without it.
+    # Imported here because server.py needs the settings that main() sets, and
+    # --help and option errors should work without them.
     from firecrest_mcp.server import mcp
 
     if transport == "stdio":
