@@ -50,7 +50,10 @@ cp path/to/firecrest-mcp/examples/firecrest-mcp.toml .firecrest-mcp.toml
 
 Then edit it (see [Config file](#config-file)). The server reads it on every call, so
 changes take effect without restarting the agent. The server looks for the config in the
-directory it starts in, which depends on how it runs.
+directory it starts in, which depends on how it runs. To keep the config outside the
+project, start the server with `--config` and the file's path. The server then ignores
+`.firecrest-mcp.toml` in the project, and relative `local_paths` entries still start
+from the directory the server starts in.
 
 ## Connecting
 
@@ -73,14 +76,14 @@ the entries to your agent's MCP configuration.
 Start the agent from the project directory, because the server starts there too and
 reads the project's config there.
 
-To keep the token somewhere else, set the `FIRECREST_TOKEN_PATH` environment variable in
-each server's entry in your MCP configuration. In Claude Code:
+To keep the token somewhere else, add `--token-file` and its path to each server's
+arguments in your MCP configuration. In Claude Code:
 
 ```json
-"env": {
-  "FIRECREST_URL": "https://api.lumi.csc.fi/v1",
-  "FIRECREST_TOKEN_PATH": "~/secrets/firecrest-token"
-}
+"args": [
+  "--firecrest-url", "https://api.lumi.csc.fi/v1",
+  "--token-file", "~/secrets/firecrest-token"
+]
 ```
 
 ### HTTP
@@ -112,9 +115,10 @@ claude mcp add --scope user --transport http lumi-aif https://lumi-aif-agents.2.
 
 ## Config file
 
-Tools only accept what the project's `.firecrest-mcp.toml` allows. A missing file
-or key allows none of the operations it controls, and unknown keys are errors. Each
-cluster has a table named after its `FIRECREST_URL` host (`api.roihu.csc.fi` is
+Tools only accept what the config file allows: `.firecrest-mcp.toml` in the project,
+or the file that `--config` names. A missing file or key allows none of the operations
+it controls, and unknown keys are errors. Each
+cluster has a table named after its `--firecrest-url` host (`api.roihu.csc.fi` is
 `[roihu]`), and the table covers all of the cluster's FirecREST systems (`cpu` and `gpu`
 on Roihu, `lumi` on LUMI). See `examples/firecrest-mcp.toml` for every key, and
 [Safeguards](docs/safeguards.md) for how the server applies them.
@@ -152,7 +156,9 @@ permissions, including outside `remote_paths`.
 The agent could widen its own access by editing `.firecrest-mcp.toml`, or read your
 token, with its own tools. The server's instructions tell it not to, which stops an
 agent that follows them, but not one that ignores them, for example after a prompt
-injection. If your agent has permission settings, use them to deny it writes to the
+injection. An agent in a container can't reach a config outside the project that the
+server reads with `--config`, as [Connecting over HTTP](docs/http.md) describes.
+Otherwise, if your agent has permission settings, use them to deny it writes to the
 config and reads of the token file. In Claude Code, for example, add these keys to
 `~/.claude/settings.json`, merged with what is already there, and start a new session:
 
@@ -173,19 +179,19 @@ config and reads of the token file. In Claude Code, for example, add these keys 
 The `Edit` rule stops the Edit and Write tools from changing the config in any project,
 and the `Read` rule stops the Read tool from reading the token. The sandbox entries stop
 Bash commands from doing either, but only where the
-[sandbox](https://code.claude.com/docs/en/sandboxing) is turned on. If you set
-`FIRECREST_TOKEN_PATH`, use that path instead. This makes it harder for the agent, not
-impossible.
+[sandbox](https://code.claude.com/docs/en/sandboxing) is turned on. If you start the
+server with `--token-file`, use that path instead. This makes it harder for the agent,
+not impossible.
 
 ## Other clusters
 
 The server should work with any cluster that has a FirecREST v2 API, though it has only
-been used on LUMI and Roihu. The `FIRECREST_URL` environment variable, set in the
-server's entry in your MCP configuration, points the server at a cluster's API, and the
-server won't start without it. To adapt the server to another cluster:
+been used on LUMI and Roihu. The `--firecrest-url` option, set in the server's entry in
+your MCP configuration, points the server at a cluster's API, and the server won't
+start without it. To adapt the server to another cluster:
 
 - Add a server entry for the cluster to your MCP configuration, with its
-  `FIRECREST_URL`. The server names the cluster after the first part of the API's host
+  `--firecrest-url`. The server names the cluster after the first part of the API's host
   name other than `api`, and uses that name for the cluster's table in the config file.
   For example, `https://api.hpc.example.org/v1` is the cluster `hpc`, with the table
   `[hpc]`.
@@ -209,7 +215,7 @@ git also ignores. Their servers are named `firecrest-lumi-dev` and
 - `mcp-stdio.json` starts the server with `uv run firecrest-mcp`.
   Restart Claude Code after switching branches or editing the code.
 - `mcp-http.json` connects to servers on ports 8000 and 8001. Start
-  them from the repo root with `uv run firecrest-mcp --transport http`, as
+  them from the repo root with `uv run firecrest-mcp -u <URL> -t http`, as
   [Connecting over HTTP](docs/http.md) describes, and restart them after switching
   branches or editing the code.
 

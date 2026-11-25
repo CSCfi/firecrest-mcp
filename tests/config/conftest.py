@@ -1,11 +1,13 @@
 """Fixtures that run the config tests with a config file in a temporary directory and
 give the tools a mock FirecREST client."""
 
+from pathlib import Path
 from unittest.mock import create_autospec
 
 import pytest
 from firecrest.v2 import Firecrest
 
+from firecrest_mcp import settings
 from firecrest_mcp.tools.compute import _user_name
 
 # Sample config that the tests write unless they pass their own content.
@@ -29,8 +31,9 @@ def config(tmp_path, monkeypatch):
     """Run the test in an empty directory and return a function that writes the
     config file there, by default with the contents of CONFIG."""
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
-    monkeypatch.setenv("FIRECREST_TOKEN_PATH", str(tmp_path / "token"))
+    monkeypatch.setattr(settings, "firecrest_url", "https://api.lumi.csc.fi/v1")
+    monkeypatch.setattr(settings, "token_file", tmp_path / "token")
+    monkeypatch.setattr(settings, "config_file", Path(settings.PROJECT_CONFIG_FILE))
 
     def write(content: str = CONFIG) -> None:
         (tmp_path / ".firecrest-mcp.toml").write_text(content)

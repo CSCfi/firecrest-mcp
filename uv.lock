@@ -550,6 +550,8 @@ source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
     { name = "fastmcp" },
+    { name = "httpx" },
+    { name = "mcp-types" },
     { name = "pydantic" },
     { name = "pyfirecrest" },
     { name = "pyjwt" },
@@ -567,6 +569,8 @@ dev = [
 requires-dist = [
     { name = "cachetools" },
     { name = "fastmcp", specifier = ">=4.0.5" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "mcp-types", specifier = ">=2.2.0" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pyfirecrest", specifier = ">=3.10.0" },
     { name = "pyjwt", specifier = ">=2" },

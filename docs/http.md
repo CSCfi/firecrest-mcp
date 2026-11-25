@@ -7,20 +7,34 @@ over HTTP.
 ## Starting the server
 
 Start the server outside the container, from the project directory, because the server
-reads `.firecrest-mcp.toml` from the directory it starts in. `FIRECREST_URL` selects the
-cluster: `https://api.lumi.csc.fi/v1` for LUMI or
+reads `.firecrest-mcp.toml` from the directory it starts in. `--firecrest-url` selects
+the cluster: `https://api.lumi.csc.fi/v1` for LUMI or
 `https://api.roihu.csc.fi/v1` for Roihu. For example, for LUMI:
 
 ```bash
 cd path/to/project
-FIRECREST_URL=https://api.lumi.csc.fi/v1 firecrest-mcp --transport http
+firecrest-mcp --firecrest-url https://api.lumi.csc.fi/v1 --transport http
 ```
+
+The short forms are `-u` for `--firecrest-url`, `-t` for `--transport`, `-p` for
+`--port` and `-c` for `--config`.
 
 The server runs until you stop it with Ctrl+C. To use a second cluster, start another
 server in another terminal with `--port 8001`, because the first one uses port 8000.
 
-To keep the token somewhere else, set `FIRECREST_TOKEN_PATH` in the same way as
-`FIRECREST_URL`.
+To keep the token somewhere else, give its path with `--token-file`.
+
+To keep the config out of the agent's reach, put it outside the project and give its
+path with `--config`. The container then doesn't see the file, because only the
+project is mounted. For example:
+
+```bash
+cd path/to/project
+firecrest-mcp -u https://api.lumi.csc.fi/v1 -c ~/.firecrest-mcp/myproject.toml -t http
+```
+
+With `--config`, the server ignores `.firecrest-mcp.toml` in the project. Relative
+`local_paths` entries still start from the project directory.
 
 ## Starting the container
 

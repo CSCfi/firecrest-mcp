@@ -1,4 +1,5 @@
-"""Checks of tool arguments against the config file, .firecrest-mcp.toml."""
+"""Checks of tool arguments against the config file, .firecrest-mcp.toml or the file
+that --config names."""
 
 import os
 import tomllib
@@ -15,22 +16,22 @@ from pydantic import (
     model_validator,
 )
 
-from firecrest_mcp.auth import token_path
-
-# Resolved against the working directory of the server process.
-CONFIG_PATH = Path(".firecrest-mcp.toml")
+from firecrest_mcp import settings
 
 
 def _protected_local_paths() -> list[Path]:
     """Return the local paths that no tool may use, resolved."""
     # A tool that writes the config file could widen what the tools may do, one that
     # writes into .git could replace the user's repository or add a hook that git
-    # runs, and one that reads the token file could copy the token. Relative paths
-    # are relative to the working directory.
+    # runs, and one that reads the token file could copy the token. The project's
+    # config file stays protected while --config names another, so that nothing
+    # written there takes effect once the server runs without --config. Relative
+    # paths are relative to the working directory.
     paths = [
-        CONFIG_PATH,
+        settings.config_file,
+        Path(settings.PROJECT_CONFIG_FILE),
         Path(".git"),
-        token_path(),
+        settings.token_file,
     ]
     return [path.resolve() for path in paths]
 
@@ -42,18 +43,20 @@ PATH_ALIASES = {"lumi": {"/project": "/projappl"}}
 
 
 def _config_error(message: str) -> ToolError:
-    return ToolError(f"Config file {CONFIG_PATH.absolute()}: {message}")
+    return ToolError(f"Config file {settings.config_file.absolute()}: {message}")
 
 
 def _not_allowed(label: str, value: str, key: str) -> ToolError:
-    return ToolError(f"{label} {value!r} is not in {key} in {CONFIG_PATH.absolute()}.")
+    return ToolError(
+        f"{label} {value!r} is not in {key} in {settings.config_file.absolute()}."
+    )
 
 
 def _require_default(option: str, value: str | None) -> str:
     if value is None:
         raise ToolError(
             f"No {option} given and default_{option} is not set in"
-            f" {CONFIG_PATH.absolute()}."
+            f" {settings.config_file.absolute()}."
         )
     return value
 
@@ -88,9 +91,9 @@ def _check_remote_syntax(path: str) -> str:
 
 def cluster_name() -> str:
     """Return the name of the cluster's table in the config file: the first label of
-    the FIRECREST_URL hostname other than "api", e.g. "roihu" for
+    the --firecrest-url hostname other than "api", e.g. "roihu" for
     https://api.roihu.csc.fi/v1."""
-    url = os.getenv("FIRECREST_URL", "")
+    url = settings.firecrest_url
     hostname = urlsplit(url).hostname or ""
     # Drop the empty labels of a missing hostname or of one like "a..b".
     labels = []
@@ -100,7 +103,7 @@ def cluster_name() -> str:
     if labels and labels[0] == "api":
         labels.pop(0)
     if not labels:
-        raise ToolError(f"Cannot derive a cluster name from FIRECREST_URL {url!r}.")
+        raise ToolError(f"Cannot derive a cluster name from --firecrest-url {url!r}.")
     return labels[0]
 
 
@@ -267,7 +270,7 @@ def _read_config() -> dict:
     """Read the config file. It is read on every call, so edits take effect without
     a restart."""
     try:
-        with CONFIG_PATH.open("rb") as f:
+        with settings.config_file.open("rb") as f:
             data = tomllib.load(f)
     except FileNotFoundError:
         raise _config_error("does not exist, so nothing is allowed.") from None

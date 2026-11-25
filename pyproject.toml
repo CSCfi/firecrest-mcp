@@ -9,6 +9,8 @@ dependencies = [
     "cachetools",
     "pyjwt>=2",
     "pydantic>=2",
+    "httpx>=0.28.1",
+    "mcp-types>=2.2.0",
 ]
 
 [project.scripts]

@@ -3,6 +3,7 @@
 import pytest
 from fastmcp.exceptions import ToolError
 
+from firecrest_mcp import settings
 from firecrest_mcp.config import load_config
 
 # Unless a test writes its own config, the paths below are checked against the
@@ -141,6 +142,6 @@ def test_lumi_project_alias(config, entry, path):
 def test_project_alias_only_on_lumi(config, monkeypatch):
     """Other clusters have no aliases."""
     config('[roihu]\nremote_paths = ["/project/project_1"]\n')
-    monkeypatch.setenv("FIRECREST_URL", "https://api.roihu.csc.fi/v1")
+    monkeypatch.setattr(settings, "firecrest_url", "https://api.roihu.csc.fi/v1")
     with pytest.raises(ToolError, match="is not in remote_paths"):
         check_remote_paths("/projappl/project_1/x")

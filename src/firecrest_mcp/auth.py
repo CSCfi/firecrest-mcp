@@ -1,17 +1,10 @@
 """Token authentication: the FirecREST token, read from a file on every request."""
 
-import os
 import time
-from pathlib import Path
 
 import jwt
 
-# Used when FIRECREST_TOKEN_PATH is not set.
-DEFAULT_TOKEN_PATH = "~/.firecrest-token"
-
-
-def token_path() -> Path:
-    return Path(os.getenv("FIRECREST_TOKEN_PATH", DEFAULT_TOKEN_PATH)).expanduser()
+from firecrest_mcp import settings
 
 
 class TokenAuth:
@@ -32,7 +25,7 @@ class TokenAuth:
             return False
 
     def get_access_token(self):
-        path = token_path()
+        path = settings.token_file
         try:
             # Refuse the file if group or others have any permission bits set
             # (same rule as SSH private keys).

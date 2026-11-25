@@ -7,7 +7,7 @@ from firecrest_mcp.config import cluster_name, load_config
 
 @tool()
 def show_config() -> dict:
-    """Return the settings from .firecrest-mcp.toml that apply to this server:
+    """Return the settings from the config file that apply to this server:
     local_paths and this cluster's table. A key that is missing from the file is shown
     as [] or null and allows nothing. The file is read on every call."""
     config = load_config()
