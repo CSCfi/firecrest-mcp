@@ -114,6 +114,47 @@ def test_changes_apply_without_reload(config):
         load_config().check_remote_paths("/scratch/project_1/file")
 
 
+@pytest.fixture
+def outside_config(config, tmp_path, monkeypatch):
+    """Point FIRECREST_MCP_CONFIG_PATH at a file outside the working directory, and
+    return the file's path. The project's .firecrest-mcp.toml allows only "other"."""
+    project = tmp_path / "project"
+    project.mkdir()
+    monkeypatch.chdir(project)
+    (project / ".firecrest-mcp.toml").write_text('local_paths = ["other"]\n[lumi]\n')
+    path = tmp_path / "outside.toml"
+    monkeypatch.setenv("FIRECREST_MCP_CONFIG_PATH", str(path))
+    return path
+
+
+def test_variable_replaces_project_file(outside_config):
+    """The file that FIRECREST_MCP_CONFIG_PATH names is read, and the project's file
+    is ignored. Relative local_paths entries are relative to the working directory,
+    not to the file."""
+    outside_config.write_text('local_paths = ["data"]\n[lumi]\n')
+    assert load_config().local_paths == ["data"]
+    project = Path.cwd().resolve()
+    assert load_config().checked_local_path("data/x") == project / "data" / "x"
+    with pytest.raises(ToolError, match=re.escape(f"in {outside_config}")):
+        load_config().checked_local_path("other/x")
+
+
+def test_variable_with_missing_file(outside_config):
+    """A missing file that the variable names allows nothing, even though the
+    project has a config file."""
+    with pytest.raises(ToolError, match=re.escape(f"{outside_config}: does not exist")):
+        load_config()
+
+
+@pytest.mark.parametrize("path", ["../outside.toml", ".firecrest-mcp.toml"])
+def test_variable_file_is_protected(outside_config, tmp_path, path):
+    """The file that the variable names is protected, even below local_paths, and so
+    is the project's ignored file."""
+    outside_config.write_text(f'local_paths = ["{tmp_path}"]\n[lumi]\n')
+    with pytest.raises(ToolError, match="is protected"):
+        load_config().checked_local_path(path)
+
+
 def test_account_defaults(config):
     """A missing account becomes the default; a given one must be allowed."""
     config()

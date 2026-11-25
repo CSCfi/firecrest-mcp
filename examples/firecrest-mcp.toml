@@ -1,9 +1,12 @@
 # Copy to .firecrest-mcp.toml in your local project directory, and replace the
-# placeholder projects with your own. A missing key allows nothing.
+# placeholder projects with your own. A missing key allows nothing. If the server's
+# FIRECREST_MCP_CONFIG_PATH names a file elsewhere, the server reads that file and
+# ignores .firecrest-mcp.toml in the project.
 
 # Local files and directories that the upload, download and submit tools may use. A
 # directory includes everything below it. Relative entries start from the project
-# directory, so "." is the whole project.
+# directory, so "." is the whole project. This holds for a file that
+# FIRECREST_MCP_CONFIG_PATH names as well, wherever that file lives.
 local_paths = ["."]
 
 # The server with FIRECREST_URL https://api.lumi.csc.fi/v1.

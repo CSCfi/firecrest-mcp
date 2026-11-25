@@ -50,7 +50,10 @@ cp path/to/firecrest-mcp/examples/firecrest-mcp.toml .firecrest-mcp.toml
 
 Then edit it (see [Config file](#config-file)). The server reads it on every call, so
 changes take effect without restarting the agent. The server looks for the config in the
-directory it starts in, which depends on how it runs.
+directory it starts in, which depends on how it runs. To keep the config outside the
+project, set `FIRECREST_MCP_CONFIG_PATH` to its path in the server's environment. The
+server then ignores `.firecrest-mcp.toml` in the project, and relative `local_paths`
+entries still start from the directory the server starts in.
 
 ## Connecting
 

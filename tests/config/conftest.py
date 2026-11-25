@@ -31,6 +31,8 @@ def config(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("FIRECREST_URL", "https://api.lumi.csc.fi/v1")
     monkeypatch.setenv("FIRECREST_TOKEN_PATH", str(tmp_path / "token"))
+    # The tests that use another config file set the variable themselves.
+    monkeypatch.delenv("FIRECREST_MCP_CONFIG_PATH", raising=False)
 
     def write(content: str = CONFIG) -> None:
         (tmp_path / ".firecrest-mcp.toml").write_text(content)

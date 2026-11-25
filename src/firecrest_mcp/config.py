@@ -1,4 +1,5 @@
-"""Checks of tool arguments against the config file, .firecrest-mcp.toml."""
+"""Checks of tool arguments against the config file, .firecrest-mcp.toml or the file
+that FIRECREST_MCP_CONFIG_PATH names."""
 
 import os
 import tomllib
@@ -17,18 +18,29 @@ from pydantic import (
 
 from firecrest_mcp.auth import token_path
 
-# Resolved against the working directory of the server process.
-CONFIG_PATH = Path(".firecrest-mcp.toml")
+# Used when FIRECREST_MCP_CONFIG_PATH is not set. Resolved against the working directory
+# of the server process.
+DEFAULT_CONFIG_PATH = ".firecrest-mcp.toml"
+
+
+def config_path() -> Path:
+    """Return the path of the config file, with "~" expanded."""
+    # A file named in the variable replaces the project's file, which is then ignored.
+    path = os.getenv("FIRECREST_MCP_CONFIG_PATH", DEFAULT_CONFIG_PATH)
+    return Path(path).expanduser()
 
 
 def _protected_local_paths() -> list[Path]:
     """Return the local paths that no tool may use, resolved."""
     # A tool that writes the config file could widen what the tools may do, one that
     # writes into .git could replace the user's repository or add a hook that git
-    # runs, and one that reads the token file could copy the token. Relative paths
-    # are relative to the working directory.
+    # runs, and one that reads the token file could copy the token. The project's
+    # config file stays protected while FIRECREST_MCP_CONFIG_PATH names another, so
+    # that nothing written there takes effect once the variable is unset. Relative
+    # paths are relative to the working directory.
     paths = [
-        CONFIG_PATH,
+        config_path(),
+        Path(DEFAULT_CONFIG_PATH),
         Path(".git"),
         token_path(),
     ]
@@ -42,18 +54,20 @@ PATH_ALIASES = {"lumi": {"/project": "/projappl"}}
 
 
 def _config_error(message: str) -> ToolError:
-    return ToolError(f"Config file {CONFIG_PATH.absolute()}: {message}")
+    return ToolError(f"Config file {config_path().absolute()}: {message}")
 
 
 def _not_allowed(label: str, value: str, key: str) -> ToolError:
-    return ToolError(f"{label} {value!r} is not in {key} in {CONFIG_PATH.absolute()}.")
+    return ToolError(
+        f"{label} {value!r} is not in {key} in {config_path().absolute()}."
+    )
 
 
 def _require_default(option: str, value: str | None) -> str:
     if value is None:
         raise ToolError(
             f"No {option} given and default_{option} is not set in"
-            f" {CONFIG_PATH.absolute()}."
+            f" {config_path().absolute()}."
         )
     return value
 
@@ -267,7 +281,7 @@ def _read_config() -> dict:
     """Read the config file. It is read on every call, so edits take effect without
     a restart."""
     try:
-        with CONFIG_PATH.open("rb") as f:
+        with config_path().open("rb") as f:
             data = tomllib.load(f)
     except FileNotFoundError:
         raise _config_error("does not exist, so nothing is allowed.") from None

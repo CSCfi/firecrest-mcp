@@ -22,6 +22,20 @@ server in another terminal with `--port 8001`, because the first one uses port 8
 To keep the token somewhere else, set `FIRECREST_TOKEN_PATH` in the same way as
 `FIRECREST_URL`.
 
+To keep the config out of the agent's reach, put it outside the project and set
+`FIRECREST_MCP_CONFIG_PATH` to its path. The container then doesn't see the file,
+because only the project is mounted. For example:
+
+```bash
+cd path/to/project
+FIRECREST_URL=https://api.lumi.csc.fi/v1 \
+FIRECREST_MCP_CONFIG_PATH=~/firecrest-configs/project.toml \
+firecrest-mcp --transport http
+```
+
+The server ignores `.firecrest-mcp.toml` in the project while the variable is set.
+Relative `local_paths` entries still start from the project directory.
+
 ## Starting the container
 
 The upload, download and submit tools use paths outside the container. Mount the

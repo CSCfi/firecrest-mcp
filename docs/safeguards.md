@@ -69,7 +69,8 @@ Overwriting the config file with `download` would widen what the tools may do, a
 repository or add a hook that git runs. The server refuses these paths even if
 `local_paths` allows them:
 
-- the config file `.firecrest-mcp.toml`,
+- the config file `.firecrest-mcp.toml`, and the file that `FIRECREST_MCP_CONFIG_PATH`
+  names if it is set,
 - the token file,
 - `.git/` in the project directory.
 
@@ -148,7 +149,7 @@ account before giving it a token:
   agent's own permission settings can stop it. The
   [README](../README.md#agent-permissions) has an example for Claude Code.
 - Sending any file in `local_paths` to the cluster, or overwriting one with
-  `download`. Only `.firecrest-mcp.toml`, the token file and `.git/` are protected.
+  `download`. Only the config files, the token file and `.git/` are protected.
 - Following a symlink on the cluster from inside `remote_paths` to outside it.
 - Reading anything a job writes to an allowed directory.
 - Starting transfer jobs in FirecREST's transfer partition (`interactive` on LUMI and
