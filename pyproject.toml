@@ -13,6 +13,9 @@ dependencies = [
     "mcp-types>=2.2.0",
 ]
 
+[project.urls]
+GitHub = "https://github.com/CSCfi/firecrest-mcp"
+
 [project.scripts]
 firecrest-mcp = "firecrest_mcp:main"
 
