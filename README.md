@@ -18,13 +18,10 @@ the documentation servers run by CSC and the LUMI AI Factory (see
 Install the server as a [uv](https://docs.astral.sh/uv/) tool:
 
 ```bash
-git clone <repo-url>
-cd firecrest-mcp
-uv tool install .
+uv tool install git+https://github.com/CSCfi/firecrest-mcp.git
 ```
 
-To update the server, pull the latest changes in the repo and run
-`uv tool install --reinstall .` there.
+To update the server to the latest commit, run `uv tool upgrade firecrest-mcp`.
 
 ## Setup
 
@@ -42,10 +39,11 @@ nano ~/.firecrest-token   # or any text editor: paste the token and save
 
 Each local project you use with FirecREST gets its own config file,
 `.firecrest-mcp.toml`, which limits what the agent working in that project can do on the
-clusters. Copy the example config into the project directory:
+clusters. Download the example config into the project directory:
 
 ```bash
-cp path/to/firecrest-mcp/examples/firecrest-mcp.toml .firecrest-mcp.toml
+curl -o .firecrest-mcp.toml \
+  https://raw.githubusercontent.com/CSCfi/firecrest-mcp/main/examples/firecrest-mcp.toml
 ```
 
 Then edit it (see [Config file](#config-file)). The server reads it on every call, so
@@ -69,7 +67,7 @@ Add the server to your agent's global MCP configuration once for each cluster yo
 to use. This makes it available wherever you start the agent.
 `examples/claude-code/mcp-stdio.json` has entries for LUMI and Roihu that you can add to
 your Claude Code configuration. They start the server with `firecrest-mcp`, which runs
-the version installed with `uv tool install .`. The file uses Claude Code's format.
+the version installed with `uv tool install`. The file uses Claude Code's format.
 Other agents use similar fields, often the same `command`, `args` and `env`, so adapt
 the entries to your agent's MCP configuration.
 
@@ -195,11 +193,13 @@ start without it. To adapt the server to another cluster:
   name other than `api`, and uses that name for the cluster's table in the config file.
   For example, `https://api.hpc.example.org/v1` is the cluster `hpc`, with the table
   `[hpc]`.
-- Optionally, add `src/firecrest_mcp/context/clusters/<cluster name>.md` (e.g. `hpc.md`)
-  with instructions for the agent, such as where its documentation is and what the agent
-  should know before it looks there (see `lumi.md`), and reinstall. A file with any
-  other name is ignored without a warning. Start the file with a `###` header naming
-  the cluster. The server sends it after its shared context for all clusters, in
+- Optionally, in a clone of the repo, add
+  `src/firecrest_mcp/context/clusters/<cluster name>.md` (e.g. `hpc.md`) with
+  instructions for the agent, such as where its documentation is and what the agent
+  should know before it looks there (see `lumi.md`). Then install the server from the
+  clone with `uv tool install --reinstall .`. A file with any other name is ignored
+  without a warning. Start the file with a `###` header naming the cluster. The server
+  sends it after its shared context for all clusters, in
   `src/firecrest_mcp/context/shared.md`.
 - If a directory has two names, as `/project` and `/projappl` do on LUMI, add it to
   `PATH_ALIASES` in `src/firecrest_mcp/config.py`.
